@@ -3,5 +3,5 @@ lp = log prior
 ll = log likelihood
 lπ = log posterior
 
-θ = unconstrained parameter vector
-ϕ = transformed parameter vector
+θ = transformed parameter vector
+ϕ = unconstrained parameter vector
