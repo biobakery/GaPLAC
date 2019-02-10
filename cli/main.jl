@@ -1,5 +1,9 @@
 
 using CSV
+using Printf
+using Distributions
+using Statistics
+using CategoricalArrays
 
 @add_arg_table s begin
     # All commands:
@@ -11,9 +15,15 @@ using CSV
         default = "stdin"
     "--bind", "-b"
         help = "Name bindings, format is \"name=value;...\""
-    "--outliers"
+    "--rmv_outliers"
         help = "Outlier removal method for training data (none|fence)"
         default = "fence"
+    "--outlier_fields"
+        help = ";-separated list of additional fields to include in outlier removal"
+        default = ""
+    "--outlier_ignore"
+        help = ";-separated list of fields to ignore for outlier removal"
+        default = ""
     "--mcmc", "-m"
         help = "MCMC samples for hyperparameters"
 
@@ -38,7 +48,7 @@ using CSV
         help = "Don't output progress to stdout (automatic if -o is stdout)"
         action = :store_true
     # predict, sample:
-    "--tdata", "-t"
+    "--atdata", "-t"
         help = "Data files at which to make predictions"
     "--at"
         help = "Predict at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
@@ -72,10 +82,6 @@ end
 
 
 
-function parse_formula(f)
-    # TODO 2
-end
-
 function read_data(data)
     df = DataFrame()
     key = []
@@ -90,60 +96,161 @@ function read_data(data)
         id = isa(m[:id], Nothing) ? "" : m[:id]
 
         # Read the data
-        # TODO: Errors
         tbl = CSV.read(file, transpose=tr, delim=delim)
+        @info @sprintf("Read %s %s%s", delim=="," ? "CSV" : "TSV", file, tr ? " (transposed)" : "")
 
         if isempty(df)
             if id == ""
-                key = tbl[1]
+                # Pick the first field for which each value is unique
+                goodkeys = [length(unique(tbl[i])) == size(tbl)[1] for i in 1:size(tbl)[2]]
+                !any(goodkeys) && error(@sprintf("No suitable id field found for %s", file))
+                keyidx = findfirst(goodkeys)
+                @info @sprintf("Using %s for sample ids in %s", names(tbl)[keyidx], file)
+                key = tbl[keyidx]
+            elseif !(Symbol(id) in names(tbl))
+                error(@sprintf("%s is not a field in %s", id, file))
             else
-                # TODO: Errors
                 key = tbl[Symbol(id)]
             end
             df = tbl
         else
             if id == ""
+                # Pick the field which matches the sample IDs the best
                 n = zeros(size(tbl)[2])
                 for i in 1:size(tbl)[2]
                     n[i] = sum([isa(findfirst(isequal(entry), key), Nothing) for entry in tbl[i]])
                 end
-                key2 = tbl[findfirst(n .== maximum(n))]
+                bestid = indmax(n)
+                id = names(tbl)[bestid]
+                key2 = tbl[bestid]
+            elseif !(Symbol(id) in names(tbl))
+                error(@sprintf("%s is not a field in %s", id, file))
             else
-                # TODO: Errors
                 key2 = tbl[Symbol(id)]
             end
+
+            # Match samples
             ix = [findfirst(isequal(k), key2) for k in key]
-
-            # TODO: Check no 100% match
-
+            if any(isa.(ix, Nothing))
+                error(@sprintf("Not all samples mapped to data in %s", file))
+            end
             tbl2 = tbl[ix,:]
 
-            # TODO: Merge
+            # Merge fields
+            for i in 1:size(tbl2)[2]
+                if names(tbl)[i] != Symbol(id)
+                    df[names(tbl)[i]] = tbl2[i]
+                end
+            end
         end
     end
+
+    return df
 end
 
-function read_tdata(args)
-    # TODO 1: read --tdata or --at
+function read_atdata(args)
+    if "atdata" in args.keys() && "at" in args.keys()
+        error("--atdata and --at are mutually exclusive")
+    end
+
+    if "atdata" in args.keys()
+        # --atdata has the same format as --data
+        return read_data(args[:atdata])
+    elseif !("atdata" in args.keys())
+        error("Expected --atdata or --at")
+    end
+
+    # Split into name=value pairs
+    df = DataFrame()
+    for nameexpr in split(args[:at], ";")
+        # name = value
+        m = match(r"^(?<name>[^=]+?) *= *(?<expr>.*)$", nameexpr)
+        isa(m, Nothing) &&
+            error("Format for --at is ;-separated \'<name> = <expression>\'")
+
+        # Evaluate
+        name = Symbol(m[:name])
+        valuefun = SyntaxTree.genfun(Meta.parse(m[:expr]), names(df))
+        value = valuefun([df[i] for i in 1:size(df)[2]]...)
+
+        # What is it?
+        if isa(value, Number)
+            # Simple value - just assign
+            df[name] = value
+        elseif isa(value, Vector)
+            # Vector - ensure size is correct and assign
+            if isempty(df) || length(value) == size(df)[1]
+                df[name] = value
+            else
+                error("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1])
+            end
+        elseif isa(value, UnivariateDistribution)
+            # Distribution - draw random values
+            df[name] = rand.(repeat(value, inner=size(df)[1]))
+        else
+    end
+
+    return df
+end
+
+function parse_formula(f)
+    # TODO 2
 end
 
 function filter_outliers(data, gp, method)
     if method == "none"
-        # TODO 3
-    elseif method == "fence"
-        # TODO 3
+        @info "Outlier filtering disabled"
+        return data
+    end
+
+    # What fields to use?
+    outl_fields = ***GP NAMES***
+    if "outlier_fields" in args.keys()
+        outl_fields = unique(cat(outl_fields, split(args[:outlier_fields], ";")))
+    end
+    if "outlier_ignore" in args.keys()
+        ignore = split(args[:outlier_ignore], ";")
+        outl_fields = [x for x in outl_fields if !(x in ignore)]
+    end
+    outl_df = data[Symbol.(outl_fields)]
+
+    # Select the outlier method
+    if method == "fence"
+        @info "Outlier filtering using inner fences"
+        f = x -> begin
+            xnn = x[!isnan(x)]
+            q1, q3 = Statistics.quantile(xnn, 0.25), Statistics.quantile(xnn, 0.75)
+            iqr = q3 - q1
+            (x .> q3 + 1.5 * iqr) .| (x .< q1 - 1.5 * iqr)
+        end
     else
         error(@sprintf("Unknown outlier filtering method: %s", method))
     end
+
+    # Which samples are outliers?
+    outlier = falses(size(outl_df)[1])
+    for i in 1:size(outl_df)[1]
+        if isa(outl_df[i], CategoricalArray)
+            @info @sprintf("Skipping %s for outlier removal (categorical)", names(outl_df)[i])
+        else
+            outlier_i = !isnan(outl_df[i]) .& f(outl_df[i])
+            outlier .|= outlier_i
+            @info @sprintf("%d outliers identified in %s", sum(outlier_i), names(outl_df)[i])
+        end
+    end
+
+    # Filter outliers
+    @info @sprintf("%d outliers removed total", sum(outlier))
+    return data[.!outlier,:]
 end
 
 
 function read_mcmc(filename)
-    # TODO
+    return read_chains(filename)
 end
 
 function write_mcmc(chain, filename, append)
-    # TODO
+    write_chains(chain, filename, append=append)
 end
 
 function read_gp_data(args)
