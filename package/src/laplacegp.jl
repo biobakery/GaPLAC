@@ -3,8 +3,9 @@
 struct LaplaceGP <: AbstractGP
     # The covariance function
 	# Signature: (x_i::Vector, x_j::Vector, self::Boolean, θc::Vector) -> Real
-    cf::Function
-    # Covariance function hyperparameter transformation
+    cf::Function # Covariance function used for prediction
+	cftr::Function # Covariance function used for training
+	# Covariance function hyperparameter transformation
     θc_link::Function
     # Prior on covariance function hyperparameters
     θc_prior::Vector{UnivariateDistribution}
@@ -38,7 +39,7 @@ end
 function covariance_function!(C::Matrix, gp::LaplaceGP, θc::Vector, x::Matrix)
 	for i in 1:size(x,1)
 		for j in i:size(x,1)
-			C[i,j] = C[j,i] = gp.cf(x[i,:], x[j,:], i==j)
+			C[i,j] = C[j,i] = gp.cftr(x[i,:], x[j,:], i==j)
 		end
 	end
 end

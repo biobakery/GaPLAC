@@ -3,7 +3,6 @@ using CSV
 using Printf
 using Distributions
 using Statistics
-using CategoricalArrays
 
 @add_arg_table s begin
     # All commands:
@@ -230,7 +229,7 @@ function filter_outliers(data, gp, method)
     # Which samples are outliers?
     outlier = falses(size(outl_df)[1])
     for i in 1:size(outl_df)[1]
-        if isa(outl_df[i], CategoricalArray)
+        if isa(outl_df[i], String)
             @info @sprintf("Skipping %s for outlier removal (categorical)", names(outl_df)[i])
         else
             outlier_i = !isnan(outl_df[i]) .& f(outl_df[i])
