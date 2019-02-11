@@ -3,34 +3,76 @@
 #   Cat(subject) * OU(time; l=Gamma(1)) +
 #   Linear(diet)
 
+# TODO: Errors from these functions could provide better context so that
+# finding the actual problem in the formula is easier
+
 using DataFrames
 using Distributions
 using Printf
 using SyntaxTree
-using ExpressionUtils
+
+struct Delta{T<:Real} <: ContinuousUnivariateDistribution
+    # The single value of the distribution
+    value::T
+end
+
+struct GPComponent
+    # Describes a part of a GP covariance function
+
+    # The indices of the x variables used by the component
+    x_varindices::Array{Int}
+    # The covariance function for the component
+    cf::Function
+    cf_expr::Expr
+end
 
 struct ParsedGPFormula
-    # Function to produce the GP's output
-    # Signature: (<yfun_params>) -> Number
-    yfun::Function
-    # Parameters of the y function
-    yfun_params::Array{Symbol}
-
     # Function to produce the GP's covariance function input matrix
     # Signature: (<xfun_params>) -> Vector{Float64}
     xfun::Function
     # Parameters of the x function
     xfun_params::Array{Symbol}
+    # Variables used in each x variable
+    xvars::Array{Set{Symbol}}
+    # Names of the x matrix columns
+    xnames::Array{String}
+
+    # Function to produce the GP's output
+    # Signature: (<yfun_params>) -> Number
+    yfun::Function
+    # Parameters of the y function
+    yfun_params::Array{Symbol}
+    # Name of the y values
+    yname::String
 
     # Function to produce the GP's likelihood function input matrix
     # Signature: (<zfun_params>) -> Vector{Float64}
     zfun::Function
     # Parameters of the z function
     zfun_params::Array{Symbol}
+    # Variables used in each x variable
+    zvars::Array{Set{Symbol}}
+    # Names of the z matrix columns
+    znames::Array{String}
 
     # The Gaussian Process object
     gp::AbstractGP
+    # Components of the GP
+    components::Array{GPComponent}
+
+    # Starting parameters
+    θc::Array{Float64}
+    θl::Array{Float64}
 end
+
+function gp_predcomponent(formula::ParsedGPFormula, comp::Int)
+    # Returns a GP which will produce predictions for a given component
+    gp = copy(formula.gp)
+    gp.cf = formula.components[comp].cf
+
+    return gp
+end
+
 
 
 struct Parameter
@@ -47,7 +89,7 @@ param_real(p) = :($p)
 struct Likelihood
     z_inputs::Int
     params::Vector{Parameter}
-    lik_expr::Expr
+    lik_expr::Function
 end
 
 # Likelihood expressions have access to:
@@ -58,14 +100,14 @@ end
 data_likelihoods = Dict(
     "Gaussian" => Likelihood(
         0, # number of fields in z
-        [Parameter("η", "StDev", 0.1, Exponential(1.0), param_positive))],
+        [Parameter("η", "StDev", 0.1, Exponential(1.0), param_positive)],
         η -> :(Normal(f, $η))
     ),
     "StudentT" => Likelihood(
         0,
-        [Parameter("ν", "DOF", 4, Exponential(5.0), param_positive)),
-         Parameter("σ", "Scale", 0.1, Exponential(1.0), param_positive))],
-        ν, σ -> :(LocationScale(f, $σ, TDist($ν)))
+        [Parameter("ν", "DOF", 4, Exponential(5.0), param_positive),
+         Parameter("σ", "Scale", 0.1, Exponential(1.0), param_positive)],
+        (ν, σ) -> :(LocationScale(f, $σ, TDist($ν)))
     ),
     "Binomial" => Likelihood(
         1,
@@ -78,8 +120,8 @@ data_likelihoods = Dict(
     "BetaBinomial" => Likelihood(
         1,
         [Parameter("u", "CompositionalMean", 0, Exponential(1.0), param_real),
-         Parameter("r", "Overdispersion", 1, Exponential(1.0), param_positive))],
-        u, r -> quote
+         Parameter("r", "Overdispersion", 1, Exponential(1.0), param_positive)],
+        (u, r) -> quote
             # Reparameterize as mean and variance (p, q)
             efu = exp(f + $u)
             p = efu / (1.0 + efu)
@@ -103,52 +145,53 @@ struct CovarianceFunction
 end
 
 # Covariance functions have access to:
-#  i, j, sample numbers
-#  $(t[k]), metadata index for metadata k
-#  x[i,$(t[k])], parameter vector for sample i and metadata k
-#  θ[$s+k], covariance function parameter k
+#  $xi, $xj, covariance input
+#  same, whether the two samples are the same sample
+#  $param, covariance function parameter
+# Signature: (xi..., xj..., params...) -> Expr
 
 covariance_functions = Dict(
     "Constant" => CovarianceFunction(
         0, true,
-        [Parameter("σ2", "Variance", 1, Gamma(2, 0.5), i -> :(exp(θ[$i])))],
-        (s, t) -> :(θ[$s+1])
+        [Parameter("σ2", "Variance", 1, Gamma(2, 0.5), param_positive)],
+        (σ2) -> :($σ2)
     ),
     "Noise" => CovarianceFunction(
-        0, false, [],
-        (s, t) -> :(i == j ? 1.0 : 0.0)
+        0, false,
+        [Parameter("η2", "NoiseVariance", 1, Gamma(2, 0.5), param_positive)],
+        (η2) -> :(same ? $η2 : 0.0)
     ),
     "Cat" => CovarianceFunction(
         1, false, [],
-        (s, t) -> :(x[i,$(t[1])] == x[j,$(t[1])] ? 1.0 : 0.0)
+        (cati, catj) -> :($cati == $catj ? 1.0 : 0.0)
     ),
     "OO" =>  CovarianceFunction(
         1, false,
-        [Parameter("l", "LengthScale", 0.1, Exponential(1), i -> :(exp(θ[$i])))],
-        (s, t) -> :(exp(-abs(x[i,$(t[1])] - x[j,$(t[1])]) / θ[$s+1]))
+        [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive)],
+        (ti, tj, l) -> :(exp(-abs($ti - $tj) / $l))
     ),
     "SExp" =>  CovarianceFunction(
         1, false, [],
-        (s, t) -> quote
-            dxs = (x[i,$(t[1])] - x[j,$(t[1])]) / θ[$s+1]
-            exp(-0.5 * (dxs * dxs))
+        (ti, tj, l) -> quote
+            dt = ($ti - $tj) / $l
+            exp(-(dt * dt))
         end
     )
 )
-covariance_functions["1"] = covariance_functions["Constant"]
 
 
 # Variable allocation for likelihood/covariance functions
 struct VarAllocator
     var_idxs::Dict{String, Int}
     var_iscat::Dict{String, Bool}
+    varset::Set{Symbol}
 
     VarAllocator(varnames, variscat) = begin
         iscat = Dict{String, Bool}()
         for i in 1:length(varnames)
             iscat[varnames[i]] = variscat[i]
         end
-        new(Dict{String, Int}(), iscat)
+        new(Dict{String, Int}(), iscat, Set(Symbol.(varnames)))
     end
 end
 
@@ -160,7 +203,7 @@ function var_iscat(alloc::VarAllocator, what::String)
     return var_exists(alloc, what) && alloc.var_iscat[what]
 end
 
-function allocate(alloc::VarAllocator, what::String)
+function allocate!(alloc::VarAllocator, what::String)
     # Allocate a variable and return its index
     if what in alloc.var_idxs.keys()
         return alloc.var_idxs[what]
@@ -182,13 +225,10 @@ function allocated(alloc::VarAllocator)
     return varlist
 end
 
-function generate_generators(alloc::VarAllocator)
-    # Fun-named function which makes GP input generation functions from the
-    # variables allocated in this allocator
-
-    vars = allocated(alloc)
-
-end
+generate_generator(alloc::VarAllocator, ex::Expr) =
+    SyntaxTree.genfun(ex, Symbol.(allocated(alloc)))
+generate_generator(alloc::VarAllocator, ex::Array{Expr}) =
+    generate_generator(alloc, Expr(:vect, ex...))
 
 
 function sanitize_var_name(name)
@@ -199,6 +239,9 @@ function sanitize_var_name(name)
 end
 
 function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Array{Bool})
+    # Main entrypoint for parsing a GP formula
+    # Uses a simple hand-rolled recursive descent parser
+
     # Not as good as a real parser, but works for our purposes
     hasmatch, yformula, final, s = match_until_wnested(formula, Set([':', '~']))
     if !hasmatch
@@ -206,56 +249,93 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
     end
 
     # Get potential variable names
+    # TODO: Move this outside of this function so that var names are universal
     variablenames = [sanitize_var_name(string(name)) name in var_names]
-    varname_set = Set{Symbol}(Symbol.(variablenames))
+    varname_set = Set(Symbol.(variablenames))
 
     # Evaluate y
     try
         yex = Meta.parse(yformula)
-        yvars = Array{Symbol}(getvariables(yex))
+        yvars = Array{Symbol}(getvariables(yex, varname_set))
         yfun = SyntaxTree.genfun(yex, yvars)
     catch err
         error(@sprintf("Error in Y formula: %s", string(err)))
     end
 
     # Parse the likelihood (optional)
+    zalloc = VarAllocator(variablenames, var_cat)
     if final == ':'
-        zalloc = VarAllocator(variablenames, var_cat)
-        lik_expr, θ, θl_prior, θl_link_expr, θl_names, s = parse_lik(s, zalloc)
+        lik_expr, zex, znames, θl, θl_prior, θl_link_expr, θl_names, s = parse_lik(s, zalloc)
         s = chompw(s)
         if isempty(s) || s[1] != '~'
             error("Expected ~ after data likelihood.")
         end
         s = s[2:end]
     else
-        lik = :(Normal(f, θ[1]))
-        θl_prior = [data_likelihoods["Gaussian"].params[1].def_prior]
-        θl_link = [data_likelihoods["Gaussian"].params[1].generate_link(1)]
+        lik_expr, zex, znames, θl, θl_prior, θl_link_expr, θl_names = parse_lik("Normal~", zalloc)
     end
     if s[1] != '|'
         error("Expected ~|")
     end
     s = s[2:end]
-    datalik = SyntaxTree.genfun(lik_expr, [:f, :z, :θ])
-    θl_link = SyntaxTree.genfun(θl_link_expr, [:θ])
 
     # Parse the covariance function
-    x = zeros(nrow(data), 0)
-    θc = zeros(0)
-    θc_prior = Array{UnivariateDistribution, 1}()
-    θc_link = Array{Expr, 1}()
+    xalloc = VarAllocator(variablenames, var_cat)
+    θc, θc_prior, θc_names, θc_link_ex =
+        Array{Float64}(), Array{ContinuousUnivariateDistribution}(),
+        Array{String}(), Array{Expr}()
+    xex, xnames = Array{Expr}(), Array{String}()
+    cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
 
-    cf_ex, s = parse_cf_expression(s, x, θc, θc_prior, θc_link, data, variablenames, variablesymbols, true)
+    # Turn the data likelihood into an actual Julia function
+    @info "Data likelihood"
+    @info lik_expr
+    datalik = SyntaxTree.genfun(lik_expr, [:f, :z, :θ])
+    θl_link = SyntaxTree.genfun(θl_link_expr, [:θ])
+    zfun = generate_generator(zex, zalloc)
 
     # Turn the covariance function into an actual Julia function
-    cf = SyntaxTree.genfun(cf_ex, [:i, :j, :θ])
+    @info "Covariance function"
+    @info cf_ex
+    cf = SyntaxTree.genfun(cf_ex, [:x1, :x2, :same, :θ])
+    θc_link = SyntaxTree.genfun(θc_link_ex, [:θ])
+    xfun = generate_generator(xex, xalloc)
 
-    return GP(dataloglik, (θl_prior...,), (θl_link...,),
-              cf, (θc_prior...,), (θc_link...,))
+    # Generate the GP object
+    gp = LaplaceGP(
+        cf, cf, # Training and prediction cfs are the same
+        θc_link, θc_prior, θc_names, 1e-9,
+        datalik, θl_link, θl_prior, θl_names)
+
+    return ParsedGPFormula(
+        xfun, allocated(xalloc), getvariables.(xex, xalloc), xnames,
+        yfun, yvars, yformula,
+        zfun, allocated(zalloc), getvariables.(zex, zalloc), znames,
+        gp, comps,
+        θl, θc)
+end
+
+function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
+    # Utility function to get the GP input variables from a data frame and a
+    # parsed GP formula
+
+    # Evaluate x
+    xdata = data[pf.xfun_params]
+    x = vcat([pf.xfun(((xdata[i,j] for j in 1:size(xdata)[2])...,)) for i in 1:size(xdata)[1]]...)
+
+    # Evaluate y
+    ydata = data[pf.yfun_params]
+    y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+
+    # Evaluate z
+    zdata = data[pf.zfun_params]
+    z = vcat([pf.zfun(((zdata[i,j] for j in 1:size(zdata)[2])...,)) for i in 1:size(zdata)[1]]...)
+
+    return x, y, z
 end
 
 function parse_lik(s::String, zalloc::VarAllocator)
-    # lik_expr, θ, θl_prior, θl_link_expr, θl_names, s
+    # lik_expr, zex, znames, θ, θl_prior, θl_link_expr, θl_names, s
 
     # Seek to first character
     os = s;
@@ -284,32 +364,39 @@ function parse_lik(s::String, zalloc::VarAllocator)
             error("Expected ~")
         end
     else
-        s = parse_params(s, zalloc, θ, θ_prior, lik.z_input)
+         zex, znames, s = parse_params(s, zalloc, params, θ, θ_prior, lik.z_input)
     end
 
     # Remove fixed priors
-    fixed = isa.(θ_prior, DeltaDistribution)
+    fixed = isa.(θ_prior, Delta)
     θ_idx = cumsum(.!fixed)
     θ_param_exprs = [fixed[i] ? θ_prior[i].value : :(θ[$(θ_idx[i])]) for i in eachindex(fixed)]
     θ = θ[.!fixed]
     θ_prior = θ_prior[.!fixed]
 
     # Evaluate link and names
-    θ_link_expr = Expr(:tuple, [p.link(i) for (i, p) in enumerate(params[.!fixed])]...)
+    θ_link_expr = Expr(:tuple, [p.link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
     θ_names = [@sprintf("θl[%s]", p.name) for p in params[.!fixed]]
 
     # Generate the expression
     lik_expr = lik.lik_expr(θ_param_exprs...)
 
-    return lik_expr, θ, θ_prior, θ_link_expr, θ_names, s
+    return lik_expr, zex, znames, θ, θ_prior, θ_link_expr, θ_names, s
 end
 
-function parse_cf_expression(s, x, θ, θ_prior, θ_link, data, variablenames, variablesymbols, toplevel)
+function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xalloc, toplevel)
+    # Returns cf_ex, s, overallneedsparam
+    # Modifies θ, θ_prior, θ_names, θ_link_ex, xex, xnames
 
     cf_ex = :()
+    cfprod_ex = :()
     overallneedsparam = true
     needsparam = true
     isprod = false
+
+    cf_xnames = Set{Symbol}()
+    comp_xidx = []
+    comps = Array{GPComponent}()
 
     while true
         s = chompw(s)
@@ -318,7 +405,7 @@ function parse_cf_expression(s, x, θ, θ_prior, θ_link, data, variablenames, v
         elseif isletter(s[1]) || s[1] == '1'
             # Covariance function name or variable name
             if s[1] == '1'
-                word = "1"
+                word = "Constant"
                 s = s[2:end]
             else
                 word, s = chomp_name(s)
@@ -337,94 +424,91 @@ function parse_cf_expression(s, x, θ, θ_prior, θ_link, data, variablenames, v
                     if cf.x_inputs > 0
                         error("Expected input metadata")
                     end
+                    cf_xex = []
+                    cf_xnames = []
                 else
-                    s, xx = parse_params(s, data, variablenames, variablesymbols, cf_θ, cf_θ_prior, cf.x_inputs)
+                    cf_xex, cf_xnames, s = parse_params(s, xalloc, cf.params, cf_θ, cf_θ_prior, lik.z_input)
                 end
-            elseif word in variablenames
+            elseif var_exists(xalloc, word)
                 # Variable name
-                idx = findfirst(word .== variablenames)
-                xx = data[idx]
-
-                if !isa(xx, Number)
-                    xx = collapse_to_numeric(xx)
-                    cf = covariance_functions["Cat"]
-                else
-                    cf = covariance_functions["Linear"]
-                end
-
-                # Use defaults for the cf
-                cf_θ = map(p -> p.default, cf.params)
-                cf_θ_prior = map(p -> p.def_prior, cf.params)
+                s = @sprintf("%s(%s)%s", var_iscat(xalloc, word) ? "Cat" : "Linear", word, s)
+                continue
             else
                 error(@sprintf("Unknown identifier in formula: %s", word))
             end
 
-            # Merge new parameters used by the cf
-            cf_s = length(θ)
-            cf_θ_link = map(i -> cf.params[i].generate_link(length(θ_link) + i), eachindex(cf.params))
-            θ = vcat(θ, cf_θ)
-            θ_prior = vcat(θ_prior, cf_θ_prior)
-            θ_link = vcat(θ_link, cf_θ_link)
-
-            # Merge new metadata used by the cf into x
-            cf_t = zeros(cf.x_inputs)
-            for i = 1:cf.x_inputs
-                hit = false
-                for j = 1:ncol(x)
-                    if all(x[:,j] .== xx[:,i])
-                        cf_t[i] = j
-                        hit = true
-                        break
-                    end
+            # Remove fixed priors and merge parameters
+            fixed = isa.(cf_θ_prior, Delta)
+            θ_idx = length(θ_prior) .+ cumsum(.!fixed)
+            push!(θ, cf_θ[.!fixed]...)
+            push!(θ_prior, cf_θ_prior[.!fixed]...)
+            push!(θ_link_ex, [p.link(:(θ[$(θ_idx[i])])) for (i, p) in enumerate(params[.!fixed])]...)
+            push!(θ_names, [begin
+                name = @sprintf("θc[%s]", p.name)
+                i = 1
+                while name in θ_names
+                    i += 1
+                    name = @sprintf("θc[%s_%d]", p.name, i)
                 end
-                if !hit
-                    x = hcat(x, xx[:,i])
-                    cf_t[i] = ncol(x)
-                end
-            end
+                name
+            end for p in params[.!fixed]]...)
 
-            # Create the covariance function expression
-            new_ex = cf.cf_expr(cf_s, cf_t)
+            # Merge x variables
+            push!(comp_xidx, length(xex) .+ (1:length(cf_xex)))
+            push!(xex, cf_xex...)
+            push!(xnames, cf_xnames...)
+
+            # Build parameters for the cf expression
+            cf_θ_param_exprs = [fixed[i] ? θ_prior[i].value : :(θ[$(θ_idx[i])]) for i in eachindex(fixed)]
+            x1_params = [:(x1[$i]) for i in 1:cf.x_inputs]
+            x2_params = [:(x2[$i]) for i in 1:cf.x_inputs]
+
+            # Build the cf expression
+            new_ex = cf.cf_expr(x1_params..., x2_params..., cf_θ_param_exprs...)
             needsparamsub = cf.has_scalar
         elseif s[1] == '('
+            # Read the subexpression
             new_ex, s, needsparamsub = parse_cf_expression(
-                s[2:end], x, θ, θ_prior, data, variablenames, variablesymbols)
-            new_ex = :(($new_ex))
+                s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xvars, xalloc, false)
         else
             error(@sprintf("Unexpected symbol in covariance function formula: %s", s[1]))
         end
 
+        # Keep track of whether we need to add a scalar parameter to this component
         needsparam = needsparam & needsparamsub
         overallneedsparam = overallneedsparam & !needsparamsub
 
-        # Append the new expression
-        if cf_ex == :()
-            cf_ex = new_ex
-        elseif isprod
-            cf_ex = :($cf_ex * $new_ex)
-        else
-            cf_ex = :($cf_ex + $new_ex)
+        # Aggregate products
+        cfprod_ex = isprod ? :($cfprod_ex * $new_ex) : new_ex
+        s = chompw(s)
+        if !isempty(s) && s[1] == '*'
+            s = s[2:end]
+            isprod = true
+            continue
+        end
+        isprod = false
+
+        # Next term is not a continuation of the product, so make sure we add
+        # a magnitude term if we need to
+        if (isempty(s) || s[1] == ')') && (!overallneedsparam && needsparam || toplevel && needsparam) || needsparam
+            s = "1 " * s
+            isprod = true
+            continue
         end
 
-        function add_magnitude()
-            cf = covariance_functions["Constant"]
-            cf_s = length(θ)
-            θ = vcat(θ, map(p -> p.default, cf.params))
-            θ_prior = vcat(θ_prior, map(p -> p.def_prior, cf.params))
-            θ_link = vcat(θ_link, map(i -> cf.params[i].generate_link(length(θ_link) + i), eachindex(cf.params)))
-            new_ex = cf.cf_expr(cf_s, [])
-            cf_ex = :($cf_ex * $new_ex)
+        # Track components
+        if toplevel
+            push!(comps, GPComponent(
+                comp_xidx,
+                SyntaxTree.genfun(cfprod_ex, [:x1, :x2, :same, :θ])
+                cfprod_ex))
         end
+
+        # Aggregate sums
+        cf_ex = cf_ex == :() ? cfprod_ex : :($cf_ex + $cfprod_ex)
 
         # Continue the expression
-        s = chompw(s)
         if isempty(s) || s[1] == ')'
-            if !overallneedsparam && needsparam || toplevel && needsparam
-                # Add an explicit magnitude parameter to this term if this
-                # subexpression contains sums
-                add_magnitude()
-                overallneedsparam = false
-            end
             if !isempty(s)
                 if toplevel
                     error("Unexpected )")
@@ -433,39 +517,37 @@ function parse_cf_expression(s, x, θ, θ_prior, θ_link, data, variablenames, v
             end
             break
         elseif s[1] == '+'
-            if needsparam
-                # This term needs an explicit magnitude parameter
-                add_magnitude()
-            end
-
             s = s[2:end]
             needsparam = true
-            overallneedsparam = false
-            isprod = false
-        elseif s[1] == '*'
-            s = s[2:end]
-            isprod = true
         else
             error(@sprintf("Unexpected \'%s\' in covariance function formula", s[1]))
         end
     end
 
-    return cf_ex, s, overallneedsparam
+    return cf_ex, s, overallneedsparam, comps
 end
 
-function parse_params(s, zalloc, θ, θ_prior, lik.z_input)
+function parse_params(s, varalloc, θ_params, θ, θ_prior, nvars)
+    # Parses a parameter set: (variables; parameter values/priors)
+    # Returns var_ex, var_names, s
+    # Modifies θ, θ_prior
+
     xi = 1
+    var_ex = repeat(:(), inner=nvars)
+    var_names = repeat("", inner=nvars)
     while xi <= n_inputs
-        hasmatch, formula, final, s = match_until_wnested(s, Set([':', '~', ')']))
+        # Read variables
+        hasmatch, formula, final, s = match_until_wnested(s, Set([',', ';', ')']))
 
         if !hasmatch
             error("Expected )")
         end
 
         try
-            xex = Meta.parse(formula)
-            xfun = SyntaxTree.genfun(xex, variablesymbols)
-            x[:,xi] = collapse_to_numeric(map(i -> xfun(map(j->data[xi,j], 1:ncol(data))...), 1:nrow(data)))
+            var_names[xi] = formula
+            var_ex[xi] = Meta.parse(formula)
+            vars = getvariables(var_ex[xi], varalloc)
+            varix = [allocate!(varalloc, var) for var in vars]
         catch err
             error(@sprintf("Error in metadata formula: %s", string(err)))
         end
@@ -483,20 +565,58 @@ function parse_params(s, zalloc, θ, θ_prior, lik.z_input)
     end
 
     if s[1] != ')'
+        # Hyperparameters
         hasmatch, priors, final, s = match_until_wnested(s, Set([')']))
 
         if !hasmatch
             error("Expected )")
         end
 
-        try
-            θ_prior_over = eval(Meta.parse(priors))
-        catch err
-            error(@sprintf("Error in priors: %s", string(err)))
-        end
+        unnamed_i = 1
+        ss = chompw(priors * ")")
+        while ss != ""
+            hasmatch, prior, final, s = match_until_wnested(ss, Set([',', ')']))
 
-        if length(θ_prior_over) > length(θ_prior)
-            error("Too many parameters")
+            if !hasmatch
+                # This should be impossible
+                error("Expected , or )")
+            end
+
+            m = match(r"^(?<name>[^=]+?) *= *(?<expr>.*)$", prior)
+            if isa(m, Nothing)
+                # Whole thing is an expression
+                if unnamed_i > length(θ_params)
+                    error("Too many parameters")
+                end
+                prior_idx = unnamed_i
+                expr = Meta.parse(prior) # TODO: Errors
+                unnamed_i += 1
+            else
+                # name = value
+                prior_idx = findfirst([p.name == m[:name] for p in θ_params])
+                if isa(prior_idx, Nothing)
+                    prior_idx = findfirst([p.longname == m[:name] for p in θ_params])
+                end
+                if isa(prior_idx, Nothing)
+                    error(@sprintf("Unknown parameter: %s", m[:name]))
+                end
+                expr = Meta.parse(m[:expr]) # TODO: Errors
+            end
+
+            value = eval(expr)
+            if isa(value, Number)
+                # This is a single number - set the value and set it as a Delta
+                θ[prior_idx] = value
+                θ_prior[prior_idx] = Delta(value)
+            elseif isa(value, UnivariateDistribution)
+                # Set the prior to this distribution
+                θ_prior[prior_idx] = value
+                if isa(value, Delta)
+                    θ[prior_idx] = value
+                end
+            else
+                error(@sprintf("Invalid value for %s: %s", θ_params[prior_idx].longname, string(typeof(value))))
+            end
         end
 
         for i = eachindex(θ_prior_over)
@@ -504,23 +624,13 @@ function parse_params(s, zalloc, θ, θ_prior, lik.z_input)
         end
     end
 
-    return s, x
+    return var_ex, var_names, s
 end
 
-function collapse_to_numeric(x)
-    if isa(x[1], Bool)
-        return map(xi -> xi ? 1.0 : 0.0, x)
-    elseif isa(x[1], Number)
-        return x
-    end
-
-    # Assume x is a factor.. translate to levels
-    # Could be more efficient...
-    levels = unique(x)
-    return map(xi -> findfirst(xi .== levels), x)
-end
+# Some utility functions
 
 function chompw(s)
+    # Chomp whitespace
     i = 1
     while i <= length(s) && isspace(s[i])
         i += 1
@@ -529,6 +639,7 @@ function chompw(s)
 end
 
 function chomp_name(s)
+    # Chomp a name
     i = 1
     while i <= length(s) && isletter(s[i])
         i += 1
@@ -537,6 +648,7 @@ function chomp_name(s)
 end
 
 function chomp_number(s)
+    # Chome a number
     i = 1
     mt = match(r"^(\-?[0-9]*\.?[0-9]*[eE]?\-?[0-9]*)(.*)$")
     if isa(mt, Nothing)
@@ -546,6 +658,7 @@ function chomp_number(s)
 end
 
 function match_until_wnested(s, what::Set{Char})
+    # Match a string until a terminal character is reached, balancing paired parens
     i = 1
     paren_count = 0
     while true
@@ -567,22 +680,4 @@ end
 getvariables(ex, vars::Set{Symbol}) = Set{Symbol}()
 getvariables(ex::Symbol, vars::Set{Symbol}) = ex in vars ? Set{String}([ex]) : Set{String}()
 getvariables(ex::Expr, vars::Set{Symbol}) = foldl(union, getvariables.(ex.args))
-
-function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
-    # Utility function to get the GP input variables from a data frame and a
-    # parsed GP formula
-
-    # Evaluate x
-    xdata = data[pf.xfun_params]
-    x = vcat([pf.xfun(((xdata[i,j] for j in 1:size(xdata)[2])...,)) for i in 1:size(xdata)[1]]...)
-
-    # Evaluate y
-    ydata = data[pf.yfun_params]
-    y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
-
-    # Evaluate z
-    zdata = data[pf.zfun_params]
-    z = vcat([pf.zfun(((zdata[i,j] for j in 1:size(zdata)[2])...,)) for i in 1:size(zdata)[1]]...)
-
-    return x, y, z
-end
+getvariables(ex, vars::VarAllocator) = getvariables(ex, vars.varset)
