@@ -20,10 +20,10 @@ struct GPComponent
     # Describes a part of a GP covariance function
 
     # The indices of the x variables used by the component
-    x_varindices::Array{Int}
+    x_varindices::Array{Int,1}
     # The covariance function for the component
     cf::Function
-    cf_expr::Expr
+    cf_expr::Any
 end
 
 struct ParsedGPFormula
@@ -182,30 +182,27 @@ covariance_functions = Dict(
 
 # Variable allocation for likelihood/covariance functions
 struct VarAllocator
-    var_idxs::Dict{String, Int}
-    var_iscat::Dict{String, Bool}
+    var_idxs::Dict{Symbol, Int}
+    var_iscat::Dict{Symbol, Bool}
     varset::Set{Symbol}
 
     VarAllocator(varnames, variscat) = begin
-        iscat = Dict{String, Bool}()
+        iscat = Dict{Symbol, Bool}()
         for i in 1:length(varnames)
-            iscat[varnames[i]] = variscat[i]
+            iscat[Symbol(varnames[i])] = variscat[i]
         end
-        new(Dict{String, Int}(), iscat, Set(Symbol.(varnames)))
+        new(Dict{Symbol, Int}(), iscat, Set(Symbol.(varnames)))
     end
 end
 
-function var_exists(alloc::VarAllocator, what::String)
-    return what in alloc.var_iscat.keys()
-end
+var_exists(alloc::VarAllocator, what) = Symbol(what) in alloc.varset
+var_iscat(alloc::VarAllocator, what) =
+    var_exists(alloc, what) && alloc.var_iscat[Symbol(what)]
 
-function var_iscat(alloc::VarAllocator, what::String)
-    return var_exists(alloc, what) && alloc.var_iscat[what]
-end
-
-function allocate!(alloc::VarAllocator, what::String)
+function allocate!(alloc::VarAllocator, what)
     # Allocate a variable and return its index
-    if what in alloc.var_idxs.keys()
+    what = Symbol(what)
+    if what in keys(alloc.var_idxs)
         return alloc.var_idxs[what]
     elseif var_exists(alloc, what)
         ix = length(alloc.var_idxs) + 1
@@ -218,7 +215,7 @@ end
 
 function allocated(alloc::VarAllocator)
     # Get a list of allocated variables in the order they are allocated
-    varlist = repeat("", inner=length(alloc.var_idxs))
+    varlist = repeat([:+], inner=length(alloc.var_idxs))
     for (var, ix) in alloc.var_idxs
         varlist[ix] = var
     end
@@ -226,8 +223,8 @@ function allocated(alloc::VarAllocator)
 end
 
 generate_generator(alloc::VarAllocator, ex::Expr) =
-    SyntaxTree.genfun(ex, Symbol.(allocated(alloc)))
-generate_generator(alloc::VarAllocator, ex::Array{Expr}) =
+    SyntaxTree.genfun(ex, allocated(alloc))
+generate_generator(alloc::VarAllocator, ex::Array{Any}) =
     generate_generator(alloc, Expr(:vect, ex...))
 
 
@@ -250,14 +247,17 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
 
     # Get potential variable names
     # TODO: Move this outside of this function so that var names are universal
-    variablenames = [sanitize_var_name(string(name)) name in var_names]
+    variablenames = [sanitize_var_name(string(name)) for name in var_names]
     varname_set = Set(Symbol.(variablenames))
 
     # Evaluate y
+    yfun = identity
+    yvars = []
     try
         yex = Meta.parse(yformula)
-        yvars = Array{Symbol}(getvariables(yex, varname_set))
+        yvars = [getvariables(yex, varname_set)...]
         yfun = SyntaxTree.genfun(yex, yvars)
+        @info "Observation" yex
     catch err
         error(@sprintf("Error in Y formula: %s", string(err)))
     end
@@ -265,14 +265,14 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
     # Parse the likelihood (optional)
     zalloc = VarAllocator(variablenames, var_cat)
     if final == ':'
-        lik_expr, zex, znames, θl, θl_prior, θl_link_expr, θl_names, s = parse_lik(s, zalloc)
+        lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, s = parse_lik(s, zalloc)
         s = chompw(s)
         if isempty(s) || s[1] != '~'
             error("Expected ~ after data likelihood.")
         end
         s = s[2:end]
     else
-        lik_expr, zex, znames, θl, θl_prior, θl_link_expr, θl_names = parse_lik("Normal~", zalloc)
+        lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names = parse_lik("Gaussian", zalloc)
     end
     if s[1] != '|'
         error("Expected ~|")
@@ -282,24 +282,22 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
     # Parse the covariance function
     xalloc = VarAllocator(variablenames, var_cat)
     θc, θc_prior, θc_names, θc_link_ex =
-        Array{Float64}(), Array{ContinuousUnivariateDistribution}(),
-        Array{String}(), Array{Expr}()
-    xex, xnames = Array{Expr}(), Array{String}()
+        Array{Float64,1}(), Array{ContinuousUnivariateDistribution,1}(),
+        Array{String,1}(), Array{Any,1}()
+    xex, xnames = Array{Any,1}(), Array{String,1}()
     cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
 
     # Turn the data likelihood into an actual Julia function
-    @info "Data likelihood"
-    @info lik_expr
-    datalik = SyntaxTree.genfun(lik_expr, [:f, :z, :θ])
-    θl_link = SyntaxTree.genfun(θl_link_expr, [:θ])
-    zfun = generate_generator(zex, zalloc)
+    @info "Data likelihood" lik_ex
+    datalik = SyntaxTree.genfun(lik_ex, [:f, :z, :θ])
+    θl_link = SyntaxTree.genfun(θl_link_ex, [:θ])
+    zfun = generate_generator(zalloc, zex)
 
     # Turn the covariance function into an actual Julia function
-    @info "Covariance function"
-    @info cf_ex
+    @info "Covariance function" cf_ex
     cf = SyntaxTree.genfun(cf_ex, [:x1, :x2, :same, :θ])
     θc_link = SyntaxTree.genfun(θc_link_ex, [:θ])
-    xfun = generate_generator(xex, xalloc)
+    xfun = generate_generator(xalloc, xex)
 
     # Generate the GP object
     gp = LaplaceGP(
@@ -308,9 +306,9 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
         datalik, θl_link, θl_prior, θl_names)
 
     return ParsedGPFormula(
-        xfun, allocated(xalloc), getvariables.(xex, xalloc), xnames,
+        xfun, allocated(xalloc), [getvariables(ex, xalloc) for ex in xex], xnames,
         yfun, yvars, yformula,
-        zfun, allocated(zalloc), getvariables.(zex, zalloc), znames,
+        zfun, allocated(zalloc), [getvariables(ex, zalloc) for ex in zex], znames,
         gp, comps,
         θl, θc)
 end
@@ -345,7 +343,7 @@ function parse_lik(s::String, zalloc::VarAllocator)
     end
 
     # Get the likelihood name
-    word, s = chomp_name(s)
+    name, s = chomp_name(s)
     if !(name in keys(data_likelihoods))
         error(@sprintf("Unknown data likelihood: %s", name))
     end
@@ -355,16 +353,18 @@ function parse_lik(s::String, zalloc::VarAllocator)
     # Set up parameters
     params = lik.params
     θ = [p.default for p in params]
-    θ_prior = [p.def_prior for p in params]
+    θ_prior = convert(Array{ContinuousUnivariateDistribution}, [p.def_prior for p in params])
 
-    if isempty(s) || s[1] != '('
-        if lik.z_input > 0
+    if isempty(s)
+        if lik.z_inputs > 0
             error("Expected input metadata")
-        elseif s[1] != '~'
-            error("Expected ~")
         end
+        zex = []
+        znames = []
+    elseif s[1] == '('
+        zex, znames, s = parse_params(s[2:end], zalloc, params, θ, θ_prior, lik.z_inputs)
     else
-         zex, znames, s = parse_params(s, zalloc, params, θ, θ_prior, lik.z_input)
+        error("Expected ( or ~")
     end
 
     # Remove fixed priors
@@ -375,7 +375,7 @@ function parse_lik(s::String, zalloc::VarAllocator)
     θ_prior = θ_prior[.!fixed]
 
     # Evaluate link and names
-    θ_link_expr = Expr(:tuple, [p.link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
+    θ_link_expr = Expr(:tuple, [p.generate_link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
     θ_names = [@sprintf("θl[%s]", p.name) for p in params[.!fixed]]
 
     # Generate the expression
@@ -393,15 +393,17 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
     overallneedsparam = true
     needsparam = true
     isprod = false
+    cf_θ = []
+    cf_θ_prior = []
 
     cf_xnames = Set{Symbol}()
-    comp_xidx = []
-    comps = Array{GPComponent}()
+    comp_xidx = Array{Int,1}()
+    comps = Array{GPComponent,1}()
 
     while true
         s = chompw(s)
         if isempty(s)
-            error("Expected: covariance function formula");
+            error("Expected: covariance function formula")
         elseif isletter(s[1]) || s[1] == '1'
             # Covariance function name or variable name
             if s[1] == '1'
@@ -416,8 +418,8 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
                 cf = covariance_functions[word]
 
                 # Set up default parameters and priors
-                cf_θ = map(p -> p.default, cf.params)
-                cf_θ_prior = map(p -> p.def_prior, cf.params)
+                cf_θ = [p.default for p in cf.params]
+                cf_θ_prior = convert(Array{ContinuousUnivariateDistribution,1}, [p.def_prior for p in cf.params])
 
                 # Parse the parameters and metadata use
                 if isempty(s) || s[1] != '('
@@ -427,7 +429,7 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
                     cf_xex = []
                     cf_xnames = []
                 else
-                    cf_xex, cf_xnames, s = parse_params(s, xalloc, cf.params, cf_θ, cf_θ_prior, lik.z_input)
+                    cf_xex, cf_xnames, s = parse_params(s[2:end], xalloc, cf.params, cf_θ, cf_θ_prior, cf.x_inputs)
                 end
             elseif var_exists(xalloc, word)
                 # Variable name
@@ -442,7 +444,7 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
             θ_idx = length(θ_prior) .+ cumsum(.!fixed)
             push!(θ, cf_θ[.!fixed]...)
             push!(θ_prior, cf_θ_prior[.!fixed]...)
-            push!(θ_link_ex, [p.link(:(θ[$(θ_idx[i])])) for (i, p) in enumerate(params[.!fixed])]...)
+            push!(θ_link_ex, [p.generate_link(:(θ[$(θ_idx[i])])) for (i, p) in enumerate(cf.params[.!fixed])]...)
             push!(θ_names, [begin
                 name = @sprintf("θc[%s]", p.name)
                 i = 1
@@ -451,25 +453,26 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
                     name = @sprintf("θc[%s_%d]", p.name, i)
                 end
                 name
-            end for p in params[.!fixed]]...)
+            end for p in cf.params[.!fixed]]...)
 
             # Merge x variables
-            push!(comp_xidx, length(xex) .+ (1:length(cf_xex)))
+            push!(comp_xidx, (length(xex) .+ collect(1:length(cf_xex)))...)
+            xbase = length(xex)
             push!(xex, cf_xex...)
             push!(xnames, cf_xnames...)
 
             # Build parameters for the cf expression
-            cf_θ_param_exprs = [fixed[i] ? θ_prior[i].value : :(θ[$(θ_idx[i])]) for i in eachindex(fixed)]
-            x1_params = [:(x1[$i]) for i in 1:cf.x_inputs]
-            x2_params = [:(x2[$i]) for i in 1:cf.x_inputs]
+            cf_θ_param_exprs = [fixed[i] ? cf_θ_prior[i].value : :(θ[$(θ_idx[i])]) for i in eachindex(fixed)]
+            x1_params = [:(x1[$(xbase + i)]) for i in 1:cf.x_inputs]
+            x2_params = [:(x2[$(xbase + i)]) for i in 1:cf.x_inputs]
 
             # Build the cf expression
             new_ex = cf.cf_expr(x1_params..., x2_params..., cf_θ_param_exprs...)
-            needsparamsub = cf.has_scalar
+            needsparamsub = !cf.has_scalar
         elseif s[1] == '('
             # Read the subexpression
             new_ex, s, needsparamsub = parse_cf_expression(
-                s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xvars, xalloc, false)
+                s[2:end], θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xvars, xalloc, false)
         else
             error(@sprintf("Unexpected symbol in covariance function formula: %s", s[1]))
         end
@@ -497,12 +500,8 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
         end
 
         # Track components
-        if toplevel
-            push!(comps, GPComponent(
-                comp_xidx,
-                SyntaxTree.genfun(cfprod_ex, [:x1, :x2, :same, :θ])
-                cfprod_ex))
-        end
+        toplevel && push!(comps, GPComponent(comp_xidx,
+            SyntaxTree.genfun(cfprod_ex, [:x1, :x2, :same, :θ]), cfprod_ex))
 
         # Aggregate sums
         cf_ex = cf_ex == :() ? cfprod_ex : :($cf_ex + $cfprod_ex)
@@ -533,9 +532,9 @@ function parse_params(s, varalloc, θ_params, θ, θ_prior, nvars)
     # Modifies θ, θ_prior
 
     xi = 1
-    var_ex = repeat(:(), inner=nvars)
-    var_names = repeat("", inner=nvars)
-    while xi <= n_inputs
+    var_ex = convert(Array{Any,1}, repeat([:()], inner=nvars))
+    var_names = repeat([""], inner=nvars)
+    while xi <= nvars
         # Read variables
         hasmatch, formula, final, s = match_until_wnested(s, Set([',', ';', ')']))
 
@@ -553,74 +552,68 @@ function parse_params(s, varalloc, θ_params, θ, θ_prior, nvars)
         end
 
         xi += 1
-        if xi <= n_inputs
+        if xi <= nvars
             if final != ','
                 error("Expected ,")
             end
         elseif final == ')'
-            s = final * s
+            return var_ex, var_names, s
         elseif final == ','
             error("Expected ; or )")
         end
     end
 
-    if s[1] != ')'
-        # Hyperparameters
-        hasmatch, priors, final, s = match_until_wnested(s, Set([')']))
+    # Hyperparameters
+    hasmatch, priors, final, s = match_until_wnested(s, Set([')']))
+
+    if !hasmatch
+        error("Expected )")
+    end
+
+    unnamed_i = 1
+    ss = chompw(priors * ")")
+    while ss != ""
+        hasmatch, prior, final, ss = match_until_wnested(ss, Set([',', ')']))
 
         if !hasmatch
-            error("Expected )")
+            # This should be impossible
+            error("Expected , or )")
         end
 
-        unnamed_i = 1
-        ss = chompw(priors * ")")
-        while ss != ""
-            hasmatch, prior, final, s = match_until_wnested(ss, Set([',', ')']))
-
-            if !hasmatch
-                # This should be impossible
-                error("Expected , or )")
+        m = match(r"^(?<name>[^=]+?) *= *(?<expr>.*)$", prior)
+        if isa(m, Nothing)
+            # Whole thing is an expression
+            if unnamed_i > length(θ_params)
+                error("Too many parameters")
             end
-
-            m = match(r"^(?<name>[^=]+?) *= *(?<expr>.*)$", prior)
-            if isa(m, Nothing)
-                # Whole thing is an expression
-                if unnamed_i > length(θ_params)
-                    error("Too many parameters")
-                end
-                prior_idx = unnamed_i
-                expr = Meta.parse(prior) # TODO: Errors
-                unnamed_i += 1
-            else
-                # name = value
-                prior_idx = findfirst([p.name == m[:name] for p in θ_params])
-                if isa(prior_idx, Nothing)
-                    prior_idx = findfirst([p.longname == m[:name] for p in θ_params])
-                end
-                if isa(prior_idx, Nothing)
-                    error(@sprintf("Unknown parameter: %s", m[:name]))
-                end
-                expr = Meta.parse(m[:expr]) # TODO: Errors
+            prior_idx = unnamed_i
+            expr = Meta.parse(prior) # TODO: Errors
+            unnamed_i += 1
+        else
+            # name = value
+            prior_idx = findfirst([p.name == m[:name] for p in θ_params])
+            if isa(prior_idx, Nothing)
+                prior_idx = findfirst([p.longname == m[:name] for p in θ_params])
             end
+            if isa(prior_idx, Nothing)
+                error(@sprintf("Unknown parameter: %s", m[:name]))
+            end
+            expr = Meta.parse(m[:expr]) # TODO: Errors
+        end
 
-            value = eval(expr)
-            if isa(value, Number)
-                # This is a single number - set the value and set it as a Delta
+        value = eval(expr)
+        if isa(value, Number)
+            # This is a single number - set the value and set it as a Delta
+            θ[prior_idx] = value
+            θ_prior[prior_idx] = Delta(value)
+        elseif isa(value, UnivariateDistribution)
+            # Set the prior to this distribution
+            θ_prior[prior_idx] = value
+            if isa(value, Delta)
                 θ[prior_idx] = value
-                θ_prior[prior_idx] = Delta(value)
-            elseif isa(value, UnivariateDistribution)
-                # Set the prior to this distribution
-                θ_prior[prior_idx] = value
-                if isa(value, Delta)
-                    θ[prior_idx] = value
-                end
-            else
-                error(@sprintf("Invalid value for %s: %s", θ_params[prior_idx].longname, string(typeof(value))))
             end
-        end
-
-        for i = eachindex(θ_prior_over)
-            θ_prior[i] = θ_prior_over[i]
+        else
+            error(@sprintf("Invalid value for %s: %s", θ_params[prior_idx].longname, string(typeof(value))))
         end
     end
 
@@ -650,9 +643,9 @@ end
 function chomp_number(s)
     # Chome a number
     i = 1
-    mt = match(r"^(\-?[0-9]*\.?[0-9]*[eE]?\-?[0-9]*)(.*)$")
-    if isa(mt, Nothing)
-        return parse(Float64, mt[1]), mt[2]
+    mt = match(r"^(\-?([0-9]+\.?[0-9]*|\.?[0-9]+)([eE]\-?[0-9]+)?)(.*)$", s)
+    if !isa(mt, Nothing)
+        return parse(Float64, mt[1]), mt[4]
     end
     return nothing, s
 end
@@ -678,6 +671,6 @@ end
 
 # Get the set of variables used by an expression
 getvariables(ex, vars::Set{Symbol}) = Set{Symbol}()
-getvariables(ex::Symbol, vars::Set{Symbol}) = ex in vars ? Set{String}([ex]) : Set{String}()
-getvariables(ex::Expr, vars::Set{Symbol}) = foldl(union, getvariables.(ex.args))
+getvariables(ex::Symbol, vars::Set{Symbol}) = ex in vars ? Set{Symbol}([ex]) : Set{Symbol}()
+getvariables(ex::Expr, vars::Set{Symbol}) = foldl(union, [getvariables(exa, vars) for exa in ex.args])
 getvariables(ex, vars::VarAllocator) = getvariables(ex, vars.varset)

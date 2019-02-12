@@ -1,3 +1,3 @@
 
-struct AbstractGP
+abstract type AbstractGP
 end
