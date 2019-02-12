@@ -1,4 +1,6 @@
 
+using LinearAlgebra
+using Distributions
 
 struct LaplaceGP <: AbstractGP
     # The covariance function
@@ -137,9 +139,16 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y::Vector, θl::Vecto
 	return fw, ∇2lπ_fw, lπ
 end
 
-function record(gp::LaplaceGP, chains::Chains, ϕ::Vector)
+function record!(gp::LaplaceGP, chains::Chains, ϕ::Vector)
 	# Separate and transform parameters
     θl, θc = θ(gp, ϕ)
+
+	for i in eachindex(θl)
+		record!(chains, Symbol(θl_names[i]), θl[i])
+	end
+	for i in eachindex(θc)
+		record!(chains, Symbol(θc_names[i]), θc[i])
+	end
 end
 
 function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
@@ -152,7 +161,7 @@ function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
     covariance_function!(xCx, gp, θc, x)
 
 	# Factorize
-	L = cholesky(xCx, )
+	L = cholesky(xCx, Val(false)).L
 
 	# Laplace approximation for the latent posterior for the training points
 	fw, ∇2lπ_fw = laplace_approx(gp, L, y, θl)
@@ -164,18 +173,18 @@ function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
     covariance_function!(yCy, gp, θc, x2, x2)
 
 	# Get the predicted distribution for the test point latents
-	???
-	μf = ???
-	σ2f = diag(???)
+	#???
+	#μf = ???
+	#σ2f = diag(???)
 
 	# Gaussian quadrature to estimate predicted mean and variance at test points
 	μ_pred = zeros(size(x2, 1))
 	σ2_pred = zeros(size(x2, 1))
 	σf = sqrt.(σ2f)
 	for i in 1:size(x2, 1)
-		for <quadrature loop>
+		begin#for <quadrature loop>
 			# Make the prediction
-			pred = gp.datalik(μf[i] + ??? * σf[i], z[i,:], θl)
+			#pred = gp.datalik(μf[i] + ??? * σf[i], z[i,:], θl)
 
 			# Mix the prediction
 			mean(pred) # TODO
