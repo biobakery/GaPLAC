@@ -325,15 +325,18 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
     xdata = data[pf.xfun_params]
     x = vcat([pf.xfun(((xdata[i,j] for j in 1:size(xdata)[2])...,)) for i in 1:size(xdata)[1]]...)
 
-    # Evaluate y
-    ydata = data[pf.yfun_params]
-    y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+    # Evaluate y if all fields are available
+    y = []
+    if all([(p in names(data)) for p in pf.yfun_params])
+        ydata = data[pf.yfun_params]
+        y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+    end
 
     # Evaluate z
     zdata = data[pf.zfun_params]
     z = vcat([pf.zfun(((zdata[i,j] for j in 1:size(zdata)[2])...,)) for i in 1:size(zdata)[1]]...)
 
-    return x, y, z
+    return x, z, y
 end
 
 function parse_lik(s::String, zalloc::VarAllocator)
