@@ -27,35 +27,34 @@ struct LaplaceGP <: AbstractGP
 	θl_names::Vector{String}
 end
 
-function θ(gp::LaplaceGP, ϕ::Vector)
-    return gp.θl_link(ϕ[eachindex(gp.θl_prior)]),
-        gp.θc_link(ϕ[length(gp.θl_prior) + eachindex(gp.θc_prior)])
+function θ(gp::LaplaceGP, ϕ)
+    return gp.θl_link(ϕ[1:length(gp.θl_prior)]),
+        gp.θc_link(ϕ[length(gp.θl_prior) .+ (1:length(gp.θc_prior))])
 end
 
-function ∇θ(gp::LaplaceGP, ϕ::Vector)
+function ∇θ(gp::LaplaceGP, ϕ)
 	θld, θcd = θ([ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
     return value.(θld), value.(θcd), partials.(θld,1), partials.(θcd,1)
 end
 
 
-function covariance_function!(C::Matrix, gp::LaplaceGP, θc::Vector, x::Matrix)
+function covariance_function!(C::Matrix, gp::LaplaceGP, θc, x)
 	for i in 1:size(x,1)
 		for j in i:size(x,1)
-			C[i,j] = C[j,i] = gp.cftr(x[i,:], x[j,:], i==j)
+			C[i,j] = C[j,i] = gp.cftr(x[i,:], x[j,:], i==j, θc)
 		end
 	end
 end
 
-function covariance_function!(C::Matrix, gp::LaplaceGP, θc::Vector, x1::Matrix, x2::Matrix)
+function covariance_function!(C::Matrix, gp::LaplaceGP, θc, x1, x2)
 	for i in 1:size(x1,1)
 		for j in 1:size(x2,1)
-			C[i,j] = gp.cf(x1[i,:], x2[j,:], false)
+			C[i,j] = gp.cf(x1[i,:], x2[j,:], false, θc)
 		end
 	end
 end
 
-function ∇2ll_f!(gp::LaplaceGP, ∇ll::Vector, ∇2ll::Vector,
-		f::Vector, z::Vector, y::Vector, θl::Vector)
+function ∇2ll_f!(gp::LaplaceGP, ∇ll, ∇2ll, f, y, z, θl)
 	# Log data likelihood and its first and second derivatives wrt f
 
 	ll = 0.0
@@ -70,7 +69,7 @@ function ∇2ll_f!(gp::LaplaceGP, ∇ll::Vector, ∇2ll::Vector,
 	return ll
 end
 
-function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y::Vector, θl::Vector;
+function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 	lπtol = 0.01, maxN = 10)
 
 	# Saddle-free Newton's method to find posterior mode for whitened latents fw
@@ -85,7 +84,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y::Vector, θl::Vecto
 		mul!(f, L, fw)
 
 		# Evaluate first and second derivatives of the likelihood at f
-		ll = ∇2ll_lik_f!(∇ll_f, ∇2ll_f, gp.logdatalik, f, θl)
+		ll = ∇2ll_f!(∇ll_f, ∇2ll_f, gp.datalik, f, z, θl)
 		@info "∇2ll_f", ∇2ll_f
 
 		# Re-whiten Jacobian and Hessian
@@ -139,7 +138,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y::Vector, θl::Vecto
 	return fw, ∇2lπ_fw, lπ
 end
 
-function record!(gp::LaplaceGP, chains::Chains, ϕ::Vector)
+function record!(gp::LaplaceGP, chains::Chains, ϕ)
 	# Separate and transform parameters
     θl, θc = θ(gp, ϕ)
 
@@ -151,11 +150,14 @@ function record!(gp::LaplaceGP, chains::Chains, ϕ::Vector)
 	end
 end
 
-function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
-		quantiles::Vector)
-	# Separate and transform parameters
-    θl, θc = θ(gp, ϕ)
+function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 
+	yCy = zeros(size(x2, 1), size(x2, 1))
+    covariance_function!(yCy, gp, θc, x2)
+
+	return zeros(size(x2, 1)), yCy
+
+	#=
 	# Evaluate the covariance function at θ
     xCx = zeros(size(x, 1), size(x, 1))
     covariance_function!(xCx, gp, θc, x)
@@ -170,12 +172,23 @@ function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
 	xCy = zeros(size(x, 1), size(x2, 1))
     covariance_function!(xCy, gp, θc, x, x2)
 	yCy = zeros(size(x2, 1), size(x2, 1))
-    covariance_function!(yCy, gp, θc, x2, x2)
+    covariance_function!(yCy, gp, θc, x2)
 
 	# Get the predicted distribution for the test point latents
-	#???
-	#μf = ???
-	#σ2f = diag(???)
+	# TODO???
+	# μf = ???
+
+	return μf2, Σf2
+	=#
+end
+
+function predict(gp::LaplaceGP, ϕ, x, y, z, x2; quantiles)
+
+	# Separate and transform parameters
+    θl, θc = θ(gp, ϕ)
+
+	# Get the latent distribution at the target points given the
+	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
 
 	# Gaussian quadrature to estimate predicted mean and variance at test points
 	μ_pred = zeros(size(x2, 1))
@@ -197,7 +210,23 @@ function predict(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, x2::Matrix;
 	return μ_pred, σ2_pred, Q_pred, μf, σ2f
 end
 
-function logposterior(gp::LaplaceGP, ϕ::Vector, x::Matrix, y::Vector, z::Vector)
+function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
+	# Separate and transform parameters
+    θl, θc = θ(gp, ϕ)
+
+	# Get the latent distribution at the target points given the
+	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
+
+	# Sample the latents at the target points
+	f_samp = rand(MvNormal(μf2, Σf2))
+
+	# Sample the data likelihood
+	y_samp = rand.([gp.datalik(f_samp[i], z2[i], θl) for i in eachindex(z2)])
+
+	return y_samp, f_samp
+end
+
+function logposterior(gp::LaplaceGP, ϕ, x, y, z)
     # Separate and transform parameters
     θl, θc, dθl_dϕl, dθc_dϕc = ∇θ(gp, ϕ)
 
