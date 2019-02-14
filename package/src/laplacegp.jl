@@ -150,6 +150,28 @@ function record!(gp::LaplaceGP, chains::Chains, ϕ)
 	end
 end
 
+function invlink(gp::LaplaceGP, θ_target)
+	# Bisecting search for ϕ which produces θ
+	minv = -1000
+	maxv = 1000
+	while any((maxv .- minv) .> 2.0 * max(eps.(minv), eps(maxv)))
+		midv = (maxv .+ minv) ./ 2.0
+		θ_mid = vcat(θ(gp, midv)...)
+		maxv[θ_mid .> θ_target] .= midv[θ_mid .> θ_target]
+		minv[θ_mid .< θ_target] .= midv[θ_mid .< θ_target]
+	end
+
+	return maxv
+end
+
+function unrecord(gp::LaplaceGP, chains::Chains, ix::Int)
+	# Build the target θ vector
+	θ_target = vcat([getrecords(chains, Symbol(name))[ix] for name in gp.θl_names],
+		[getrecords(chains, Symbol(name))[ix] for name in gp.θc_names])
+
+	return invlink(gp, θ_target)
+end
+
 function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 
 	yCy = zeros(size(x2, 1), size(x2, 1))
