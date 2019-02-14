@@ -9,7 +9,6 @@
 using DataFrames
 using Distributions
 using Printf
-using SyntaxTree
 
 struct Delta{T<:Real} <: ContinuousUnivariateDistribution
     # The single value of the distribution
@@ -157,21 +156,21 @@ covariance_functions = Dict(
         (σ2) -> :($σ2)
     ),
     "Noise" => CovarianceFunction(
-        0, false,
-        [Parameter("η2", "NoiseVariance", 1, Gamma(2, 0.5), param_positive)],
-        (η2) -> :(same ? $η2 : 0.0)
+        0, false, [],
+        () -> :(same ? 1.0 : 0.0)
     ),
     "Cat" => CovarianceFunction(
         1, false, [],
         (cati, catj) -> :($cati == $catj ? 1.0 : 0.0)
     ),
-    "OO" =>  CovarianceFunction(
+    "OU" =>  CovarianceFunction(
         1, false,
         [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive)],
         (ti, tj, l) -> :(exp(-abs($ti - $tj) / $l))
     ),
     "SExp" =>  CovarianceFunction(
-        1, false, [],
+        1, false,
+        [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive)],
         (ti, tj, l) -> quote
             dt = ($ti - $tj) / $l
             exp(-(dt * dt))
@@ -222,8 +221,9 @@ function allocated(alloc::VarAllocator)
     return varlist
 end
 
+genfun(ex, args) = eval(Expr(:->, Expr(:tuple, args...), ex))
 generate_generator(alloc::VarAllocator, ex::Expr) =
-    SyntaxTree.genfun(ex, allocated(alloc))
+    genfun(ex, allocated(alloc))
 generate_generator(alloc::VarAllocator, ex::Array{Any}) =
     generate_generator(alloc, Expr(:vect, ex...))
 
@@ -256,7 +256,7 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
     try
         yex = Meta.parse(yformula)
         yvars = [getvariables(yex, varname_set)...]
-        yfun = SyntaxTree.genfun(yex, yvars)
+        yfun = genfun(yex, yvars)
         @info "Observation" yex
     catch err
         error(@sprintf("Error in Y formula: %s", string(err)))
@@ -289,15 +289,19 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
 
     # Turn the data likelihood into an actual Julia function
     @info "Data likelihood" lik_ex
-    datalik = SyntaxTree.genfun(lik_ex, [:f, :z, :θ])
-    θl_link = SyntaxTree.genfun(θl_link_ex, [:θ])
+    datalik = genfun(lik_ex, [:f, :z, :θ])
+    θl_link = genfun(θl_link_ex, [:θ])
     zfun = generate_generator(zalloc, zex)
 
     # Turn the covariance function into an actual Julia function
     @info "Covariance function" cf_ex
-    cf = SyntaxTree.genfun(cf_ex, [:x1, :x2, :same, :θ])
-    θc_link = SyntaxTree.genfun(θc_link_ex, [:θ])
+    cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
+    θc_link = genfun(θc_link_ex, [:θ])
     xfun = generate_generator(xalloc, xex)
+
+    # Record parameter/input allocations
+    @info "Parameter vectors" θl_names θc_names
+    @info "Inputs" xnames znames
 
     # Generate the GP object
     gp = LaplaceGP(
@@ -501,7 +505,7 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
 
         # Track components
         toplevel && push!(comps, GPComponent(comp_xidx,
-            SyntaxTree.genfun(cfprod_ex, [:x1, :x2, :same, :θ]), cfprod_ex))
+            genfun(cfprod_ex, [:x1, :x2, :same, :θ]), cfprod_ex))
 
         # Aggregate sums
         cf_ex = cf_ex == :() ? cfprod_ex : :($cf_ex + $cfprod_ex)
@@ -643,7 +647,7 @@ end
 function chomp_number(s)
     # Chome a number
     i = 1
-    mt = match(r"^(\-?([0-9]+\.?[0-9]*|\.?[0-9]+)([eE]\-?[0-9]+)?)(.*)$", s)
+    mt = match(r"^(\-?([0-9]+\.?[0-9]*|\.[0-9]+)([eE]\-?[0-9]+)?)(.*)$", s)
     if !isa(mt, Nothing)
         return parse(Float64, mt[1]), mt[4]
     end
