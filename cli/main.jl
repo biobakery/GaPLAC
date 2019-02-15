@@ -1,72 +1,24 @@
 
+using Logging
 using CSV
 using Printf
 using Distributions
 using Statistics
 using ArgParse
 
+include("../package/src/chains.jl")
+include("../package/src/mcmc.jl")
+include("../package/src/bf.jl")
+include("../package/src/gp.jl")
+include("../package/src/mcmcgp.jl")
+include("../package/src/laplacegp.jl")
+include("../package/src/formula.jl")
+
+
 function parse_cmdline()
     s = ArgParseSettings()
 
     @add_arg_table s begin
-        #=
-        # All commands:
-        "formula"
-            help = "Gaussian Process formula"
-        "--data", "-d"
-            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-            default = "stdin"
-        "--bind", "-b"
-            help = "Name bindings, format is \"name=value;...\""
-        "--rmv_outliers"
-            help = "Outlier removal method for training data (none|fence)"
-            default = "fence"
-        "--outlier_fields"
-            help = ";-separated list of additional fields to include in outlier removal"
-            default = ""
-        "--outlier_ignore"
-            help = ";-separated list of fields to ignore for outlier removal"
-            default = ""
-        "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters"
-
-        # mcmc:
-        "--anneal", "-a"
-            help = "Annealed samples"
-            arg_type = Int
-            default = 100
-        "--burnin", "-b"
-            help = "Burn-in samples"
-            arg_type = Int
-            default = 0
-        "--thin", "-t"
-            help = "Thinning"
-            arg_type = Int
-            default = 1
-        "--samples", "-n"
-            help = "Number of MCMC samples to generate (after anneal, burn-in, and thinning)"
-            arg_type = Int
-            default = 100
-        "--silent"
-            help = "Don't output progress to stdout (automatic if -o is stdout)"
-            action = :store_true
-        # predict, sample:
-        "--atdata", "-t"
-            help = "Data files at which to make predictions"
-        "--at"
-            help = "Predict at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
-        # fitplot:
-        "--component", "--comp"
-            help = "Plot fit plots for components with the given variables"
-        # select:
-        "--mcmc2", "-m2"
-            help = "MCMC samples for hyperparameters of the second model (for model comparison)"
-
-        "--output", "-o"
-            help = "Output filename, accepts \"stdout\". For tabular output, supports format flags"
-            default = "stdout"
-            =#
-
         "mcmc"
             help = "Run MCMC to optimize hyperparameters"
             action = :command
@@ -82,6 +34,9 @@ function parse_cmdline()
         "select"
             help = "Output model selection parameters; requires --mcmc and --mcmc2"
             action = :command
+
+        "--log"
+            help = "Direct logging output to a file"
     end
 
     @add_arg_table s["mcmc"] begin
@@ -104,7 +59,7 @@ function parse_cmdline()
             help = ";-separated list of fields to ignore for outlier removal"
             default = ""
         "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters; if provided, the chain will be extended"
+            help = "MCMC samples for hyperparameters; if provided, the chain will be extended. Does NOT support --data format flags"
         "--anneal", "-a"
             help = "Annealed samples"
             arg_type = Int
@@ -121,11 +76,8 @@ function parse_cmdline()
             help = "Number of MCMC samples to generate (after anneal, burn-in, and thinning)"
             arg_type = Int
             default = 100
-        "--silent"
-            help = "Don't output progress to stdout (automatic if -o is stdout)"
-            action = :store_true
         "--output", "-o"
-            help = "Output filename, accepts \"stdout\", supports --data format flags"
+            help = "Output filename, accepts \"stdout\", does NOT support --data format flags"
             default = "stdout"
     end
 
@@ -149,7 +101,7 @@ function parse_cmdline()
             help = ";-separated list of fields to ignore for outlier removal"
             default = ""
         "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters"
+            help = "MCMC samples for hyperparameters, does NOT support --data format flags"
         "--atdata", "-t"
             help = "Data files providing variable values at which to make predictions"
         "--at"
@@ -178,7 +130,7 @@ function parse_cmdline()
             help = ";-separated list of fields to ignore for outlier removal"
             default = ""
         "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters"
+            help = "MCMC samples for hyperparameters, does NOT support --data format flags"
         "--atdata", "-t"
             help = "Data files providing variable values at which to sample the GP"
         "--at"
@@ -208,7 +160,7 @@ function parse_cmdline()
             help = ";-separated list of fields to ignore for outlier removal"
             default = ""
         "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters"
+            help = "MCMC samples for hyperparameters, does NOT support --data format flags"
         "--component", "--comp"
             help = "Plot fit plots for components with the given variables"
         "--output", "-o"
@@ -218,9 +170,9 @@ function parse_cmdline()
 
     @add_arg_table s["select"] begin
         "--mcmc", "-m"
-            help = "MCMC samples for hyperparameters"
+            help = "MCMC samples for hyperparameters, does NOT support --data format flags"
         "--mcmc2", "-c"
-            help = "MCMC samples for hyperparameters of the second model (for model comparison)"
+            help = "MCMC samples for hyperparameters of the second model (for model comparison), does NOT support --data format flags"
     end
 
     return parse_args(s)
@@ -235,12 +187,13 @@ function read_data(data)
         m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>[A-Za-z0-9]*):)?(?<file>[^:]*)$", file)
 
         # Break into parts
-        f = m[:file]
+        filename = m[:file]
         tr = isa(m[:tr], Nothing) ? false : m[:tr] == "#"
         delim = isa(m[:ct], Nothing) ? '\t' : (m[:ct] == "," ? ',' : '\t')
         id = isa(m[:id], Nothing) ? "" : m[:id]
 
         # Read the data
+        file = filename == "stdin" ? stdin : filename
         tbl = CSV.read(file, transpose=tr, delim=delim)
         @info @sprintf("Read %s %s%s", delim=="," ? "CSV" : "TSV", file, tr ? " (transposed)" : "")
 
@@ -399,11 +352,13 @@ end
 
 
 function read_mcmc(filename)
-    return read_chains(filename)
+    file = filename == "stdin" ? stdin : filename
+    return read_chains(file)
 end
 
 function write_mcmc(chain, filename, append)
-    write_chains(chain, filename, append=append)
+    file = filename == "stdout" ? stdout : filename
+    write_chains(chain, file, append=append)
 end
 
 function read_gp_data(args)
@@ -415,6 +370,7 @@ function read_gp_data(args)
 
     # Parse the formula
     !("formula" in keys(args)) && error("--formula expected")
+    @info @sprintf("Formula: %s", args["formula"])
     parsedgp = parse_gp_formula(args["formula"])
 
     # Filter outliers
@@ -428,10 +384,10 @@ end
 
 function write_tabular(df, filename)
     # (#?[,~]?ID?:)?filename
-    m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>[A-Za-z0-9]*):)?(?<file>[^:]*)$", file)
+    m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>.*):)?(?<file>[^:]*)$", file)
 
     # Break into parts
-    f = m[:file]
+    filename = m[:file]
     tr = isa(m[:tr], Nothing) ? false : m[:tr] == "#"
     delim = isa(m[:ct], Nothing) ? '\t' : (m[:ct] == "," ? ',' : '\t')
 
@@ -439,7 +395,8 @@ function write_tabular(df, filename)
     tr && error("Transposed output is currently not supported")
 
     # Write data
-    CSV.write(f, df, delim=delim)
+    file = filename == "stdin" ? stdin : filename
+    CSV.write(file, df, delim=delim)
 end
 
 
@@ -461,7 +418,8 @@ function cmd_mcmc(args)
     end
 
     # Run the chain
-    chain = gp_mcmc(start_θ, anneal)
+    # TODO
+    chain = gp_mcmc(parsedgp.gp, start_θ)
 
     # Thinning
     chain = chain[burnin:thin:end]
@@ -563,19 +521,41 @@ function cmd_select(args)
     println(@sprintf("%.3f", l2bf))
 end
 
+function processcmd(args)
+    # Process commands
+    cmd = args["%COMMAND%"]
+    if cmd == "sample"
+        cmd_sample(args)
+    elseif cmd == "predict"
+        cmd_predict(args)
+    elseif cmd == "mcmc"
+        cmd_mcmc(args)
+    elseif cmd == "select"
+        cmd_select(args)
+    elseif cmd == "fitplot"
+        cmd_fitplot(args)
+    end
+end
 
 
 # Main
 args = parse_cmdline()
-cmd = args["%COMMAND%"]
-if cmd == "sample"
-    cmd_sample(args)
-elseif cmd == "predict"
-    cmd_predict(args)
-elseif cmd == "mcmc"
-    cmd_mcmc(args)
-elseif cmd == "select"
-    cmd_select(args)
-elseif cmd == "fitplot"
-    cmd_fitplot(args)
+
+# Redirect logging to a file if necessary
+if haskey(args, "log")
+    io = open(args["log"], "w+")
+    logger = SimpleLogger(io)
+    global_logger(logger)
+else
+    logger = ConsoleLogger(show_limited=false)
+    global_logger(logger)
+end
+
+# Process commands
+processcmd(args)
+
+# Clean up
+if haskey(args, "log")
+    flush(io)
+    close(io)
 end

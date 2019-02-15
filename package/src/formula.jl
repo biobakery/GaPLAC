@@ -30,11 +30,11 @@ struct ParsedGPFormula
     # Signature: (<xfun_params>) -> Vector{Float64}
     xfun::Function
     # Parameters of the x function
-    xfun_params::Array{Symbol}
+    xfun_params::Array{Symbol,1}
     # Variables used in each x variable
-    xvars::Array{Set{Symbol}}
+    xvars::Array{Set{Symbol},1}
     # Names of the x matrix columns
-    xnames::Array{String}
+    xnames::Array{String,1}
 
     # Function to produce the GP's output
     # Signature: (<yfun_params>) -> Number
@@ -48,20 +48,20 @@ struct ParsedGPFormula
     # Signature: (<zfun_params>) -> Vector{Float64}
     zfun::Function
     # Parameters of the z function
-    zfun_params::Array{Symbol}
+    zfun_params::Array{Symbol,1}
     # Variables used in each x variable
-    zvars::Array{Set{Symbol}}
+    zvars::Array{Set{Symbol},1}
     # Names of the z matrix columns
-    znames::Array{String}
+    znames::Array{String,1}
 
     # The Gaussian Process object
     gp::AbstractGP
     # Components of the GP
-    components::Array{GPComponent}
+    components::Array{GPComponent,1}
 
     # Starting parameters
-    θc::Array{Float64}
-    θl::Array{Float64}
+    θc::Array{Float64,1}
+    θl::Array{Float64,1}
 end
 
 function gp_predcomponent(formula::ParsedGPFormula, comp::Int)
@@ -253,11 +253,11 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
     # Evaluate y
     yfun = identity
     yvars = []
+    yex = :()
     try
         yex = Meta.parse(yformula)
         yvars = [getvariables(yex, varname_set)...]
         yfun = genfun(yex, yvars)
-        @info "Observation" yex
     catch err
         error(@sprintf("Error in Y formula: %s", string(err)))
     end
@@ -285,23 +285,26 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
         Array{Float64,1}(), Array{ContinuousUnivariateDistribution,1}(),
         Array{String,1}(), Array{Any,1}()
     xex, xnames = Array{Any,1}(), Array{String,1}()
-    cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
+    if occursin(r"^\s*0\s*$", s)
+        cf_ex = :(0.)
+        s = ""
+        comps = Array{Component,1}()
+    else
+        cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
+    end
 
     # Turn the data likelihood into an actual Julia function
-    @info "Data likelihood" lik_ex
     datalik = genfun(lik_ex, [:f, :z, :θ])
     θl_link = genfun(θl_link_ex, [:θ])
     zfun = generate_generator(zalloc, zex)
 
     # Turn the covariance function into an actual Julia function
-    @info "Covariance function" cf_ex
     cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
     θc_link = genfun(θc_link_ex, [:θ])
     xfun = generate_generator(xalloc, xex)
 
-    # Record parameter/input allocations
-    @info "Parameter vectors" θl_names θc_names
-    @info "Inputs" xnames znames
+    # Record parse results
+    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θc_names Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names Covariance=cf_ex
 
     # Generate the GP object
     gp = LaplaceGP(

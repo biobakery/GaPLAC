@@ -74,6 +74,8 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 
 	# Saddle-free Newton's method to find posterior mode for whitened latents fw
 	fw = zeros(length(y))
+	∇ll_f = zeros(length(y))
+	∇2ll_f = zeros(length(y))
 	∇2ll_fw = zeros(length(y), length(y))
 	∇2ll_fw_temp = zeros(length(y), length(y))
 	α = 1.0
@@ -173,13 +175,8 @@ function unrecord(gp::LaplaceGP, chains::Chains, ix::Int)
 end
 
 function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
+	# Conditional latent distribution at the target x2
 
-	yCy = zeros(size(x2, 1), size(x2, 1))
-    covariance_function!(yCy, gp, θc, x2)
-
-	return zeros(size(x2, 1)), yCy
-
-	#=
 	# Evaluate the covariance function at θ
     xCx = zeros(size(x, 1), size(x, 1))
     covariance_function!(xCx, gp, θc, x)
@@ -188,7 +185,7 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 	L = cholesky(xCx, Val(false)).L
 
 	# Laplace approximation for the latent posterior for the training points
-	fw, ∇2lπ_fw = laplace_approx(gp, L, y, θl)
+	fwhat, ∇2lπ_fw = laplace_approx(gp, L, y, θl)
 
 	# Evaluate covariance between training and test points
 	xCy = zeros(size(x, 1), size(x2, 1))
@@ -197,11 +194,14 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
     covariance_function!(yCy, gp, θc, x2)
 
 	# Get the predicted distribution for the test point latents
-	# TODO???
-	# μf = ???
+	∇ll_f = zeros(length(y))
+	∇2ll_f = zeros(length(y))
+	ll = ∇2ll_f!(∇ll_f, ∇2ll_f, gp.datalik, L*fwhat, z, θl)
+
+	μf2 = xCy * ∇ll_f
+	Σf2 = yCy .- ((diagm(0 => ∇2ll_f) * xCx) \ transpose(xCy)) * xCy
 
 	return μf2, Σf2
-	=#
 end
 
 function predict(gp::LaplaceGP, ϕ, x, y, z, x2; quantiles)
@@ -280,6 +280,6 @@ function logposterior(gp::LaplaceGP, ϕ, x, y, z)
     lp = sum(logpdf.(θl_prior, θl) .+ log.(dθl_dϕl)) +
 	     sum(logpdf.(θc_prior, θc) .+ log.(dθc_dϕc))
 
-    # Log posterior
-    return lp + ll
+    # Return log prior and log lik separately
+    return lp, ll
 end
