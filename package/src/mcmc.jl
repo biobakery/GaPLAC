@@ -1,5 +1,5 @@
 
-struct AbstractMCMC
+abstract type AbstractMCMC
 end
 
 mutable struct MCMCStats
@@ -23,54 +23,54 @@ struct UnivariateSliceMCMC :< AbstractMCMC
 	f::Function
 	# Parameter widths
 	w::Vector{Float64}
+	# Number of samples to generate
+	N::Int
 end
 
 
-function sample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCStats)
-    # TODO: Adapt code
-end
+function sample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCStats = MCMCStats())
+	start_t = time_ns()
+	y_x0 = mcmc.f(x)
+	stats.evaluations += 1
 
-# OLD CODE:
-function uvslicesamp!(x, w, llfun::Function; N=1)
-	ll_x0 = llfun(x)
-	nreject = 0
-
-	for i = 1:N
+	for i = 1:mcmc.N
 		for k = eachindex(x)
 			# Set up the window
-			ub = w
-			lb = -w
-			sll = ll_x0 + log(rand())
+			lb, ub = -mcmc.w, mcmc.w
+			sy = y_x0 + log(rand())
 
 			# Shrink until we're inside the slice
-			dx = 0.0 .* x
-			lln = 0.0
+			dx = zeros(length(x))
+			yn = 0.0
 			for j = 1:20
 				# Pick a point inside the window
 				dx[k] = lb + rand() * (ub - lb)
 
 				# Are we inside?
-				lln = llfun(x .+ dx)
-				lln >= sll && break # Yup
+				yn = llfun(x .+ dx)
+				stats.evaluations += 1
+				yn >= sy && break # Yup
 
 				# Nope - shrink
-				nreject += 1
+				stats.rejects += 1
 				if dx[k] < 0
 					lb = dx[k]
 				else
 					ub = dx[k]
 				end
 			end
-			if lln < sll
+			if yn < sy
 				# Failed
 				continue
 			end
 
 			# Move
+			stats.accepts += 1
 			x .= x .+ dx
-			ll_x0 = lln
+			y_x0 = yn
 		end
 	end
 
-	return ll_x0, nreject
+	stats.total_time_s += (time_ns() - start_t) / 1.e9
+	return y_x0
 end
