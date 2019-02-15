@@ -6,12 +6,7 @@ using Distributions
 using Statistics
 using ArgParse
 
-include("../package/src/chains.jl")
-include("../package/src/mcmc.jl")
-include("../package/src/bf.jl")
 include("../package/src/gp.jl")
-include("../package/src/mcmcgp.jl")
-include("../package/src/laplacegp.jl")
 include("../package/src/formula.jl")
 
 
@@ -174,6 +169,13 @@ function parse_cmdline()
 end
 
 
+function include_workhorse()
+    include("../package/src/chains.jl")
+    include("../package/src/mcmc.jl")
+    include("../package/src/mcmcgp.jl")
+    include("../package/src/laplacegp.jl")
+end
+
 function read_data(data)
     df = DataFrame()
     key = []
@@ -184,7 +186,11 @@ function read_data(data)
         # Break into parts
         filename = m[:file]
         tr = isa(m[:tr], Nothing) ? false : m[:tr] == "#"
-        delim = isa(m[:ct], Nothing) ? '\t' : (m[:ct] == "," ? ',' : '\t')
+        delim = if isa(m[:ct], Nothing)
+            endswith(filename, "csv") ? ',' : '\t'
+        else
+            m[:ct] == "," ? ',' : '\t'
+        end
         id = isa(m[:id], Nothing) ? "" : m[:id]
 
         # Read the data
@@ -298,19 +304,20 @@ function atdata_inputs(args, parsedgp)
     return df, x, z, index
 end
 
-function filter_outliers(data, parsedgp, method)
+function filter_outliers(data, parsedgp, args)
+    method = args["rmv_outliers"]
     if method == "none"
         @info "Outlier filtering disabled"
         return data
     end
 
     # What fields to use?
-    outl_fields = parsedgp.xvars
+    outl_fields = string.(parsedgp.xvars...)
     if !isa(args["outlier_fields"], Nothing)
-        outl_fields = unique(cat(outl_fields, split(args[:outlier_fields], ";")))
+        outl_fields = unique(vcat(outl_fields, split(args["outlier_fields"], ";")))
     end
     if !isa(args["outlier_ignore"], Nothing)
-        ignore = split(args[:outlier_ignore], ";")
+        ignore = split(args["outlier_ignore"], ";")
         outl_fields = [x for x in outl_fields if !(x in ignore)]
     end
     outl_df = data[Symbol.(outl_fields)]
@@ -364,12 +371,18 @@ function read_gp_data(args)
     end
 
     # Parse the formula
-    !("formula" in keys(args)) && error("--formula expected")
+    isa(args["formula"], Nothing) && error("--formula expected")
     @info @sprintf("Formula: %s", args["formula"])
-    parsedgp = parse_gp_formula(args["formula"])
+    varnames = string.(names(data))
+    iscat = [!(typeof(data[i][1]) <: Number) for i in 1:size(data,2)]
+    parsedgp = parse_gp_formula(args["formula"], varnames, iscat)
+
+    # Include work functions now so that these functions are built AFTER
+    # the parsed GP formula functions
+    include_workhorse()
 
     # Filter outliers
-    data = filter_outliers(data, parsedgp, args["outliers"])
+    data = filter_outliers(data, parsedgp, args)
 
     # Transform to GP training vectors x, y, z
     x, z, y = gp_inputs(parsedgp, data)
@@ -502,6 +515,9 @@ function cmd_fitplot(args)
 end
 
 function cmd_select(args)
+    include("../package/src/chains.jl")
+    include("../package/src/bf.jl")
+
     # Load chains
     isa(args["mcmc"], Nothing) && error("Expected --mcmc")
     isa(args["mcmc2"], Nothing) && error("Expected --mcmc2")
@@ -554,31 +570,3 @@ if !isa(args["log"], Nothing)
     flush(io)
     close(io)
 end
-
-#=
-cmd_sample(Dict(
-    "formula" => "y : Gaussian(0.01) ~| SExp(t;l=1.5)",
-    "data" =>
-    help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-"--bind", "-b"
-    help = "Name bindings, format is \"name=value;...\""
-"--rmv_outliers"
-    help = "Outlier removal method for training data (none|fence)"
-    default = "fence"
-"--outlier_fields"
-    help = ";-separated list of additional fields to include in outlier removal"
-    default = ""
-"--outlier_ignore"
-    help = ";-separated list of fields to ignore for outlier removal"
-    default = ""
-"--mcmc", "-m"
-    help = "MCMC samples for hyperparameters, does NOT support --data format flags"
-"--atdata", "-t"
-    help = "Data files providing variable values at which to sample the GP"
-"--at"
-    help = "Sample at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
-"--output", "-o"
-    help = "Output filename, accepts \"stdout\", supports --data format flags"
-    default = "stdout"
-))
-=#
