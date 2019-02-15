@@ -385,7 +385,7 @@ function parse_lik(s::String, zalloc::VarAllocator)
     θ_prior = θ_prior[.!fixed]
 
     # Evaluate link and names
-    θ_link_expr = Expr(:tuple, [p.generate_link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
+    θ_link_expr = Expr(:vect, [p.generate_link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
     θ_names = [@sprintf("θl[%s]", p.name) for p in params[.!fixed]]
 
     # Generate the expression

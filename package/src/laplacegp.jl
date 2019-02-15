@@ -41,7 +41,11 @@ end
 function covariance_function!(C::Matrix, gp::LaplaceGP, θc, x)
 	for i in 1:size(x,1)
 		for j in i:size(x,1)
-			C[i,j] = C[j,i] = gp.cftr(x[i,:], x[j,:], i==j, θc)
+			if i==j
+				C[i,i] = gp.cftr(x[i,:], x[j,:], true, θc) + gp.jitter
+			else
+				C[i,j] = C[j,i] = gp.cftr(x[i,:], x[j,:], false, θc)
+			end
 		end
 	end
 end
@@ -73,11 +77,13 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 	lπtol = 0.01, maxN = 10)
 
 	# Saddle-free Newton's method to find posterior mode for whitened latents fw
-	fw = zeros(length(y))
-	∇ll_f = zeros(length(y))
-	∇2ll_f = zeros(length(y))
-	∇2ll_fw = zeros(length(y), length(y))
+	f, fw = zeros(length(y)), zeros(length(y))
+	∇ll_f, ∇ll_fw = zeros(length(y)), zeros(length(y))
+	∇lπ_fw = zeros(length(y))
+	∇2ll_f, ∇2ll_fw = zeros(length(y)), zeros(length(y), length(y))
 	∇2ll_fw_temp = zeros(length(y), length(y))
+	∇2lπ_fw, ∇2lπ_fw_reg = zeros(length(y), length(y)), zeros(length(y), length(y))
+	dfw = zeros(length(y))
 	α = 1.0
 	lπ = -Inf
 
@@ -86,8 +92,8 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 		mul!(f, L, fw)
 
 		# Evaluate first and second derivatives of the likelihood at f
-		ll = ∇2ll_f!(∇ll_f, ∇2ll_f, gp.datalik, f, z, θl)
-		@info "∇2ll_f", ∇2ll_f
+		ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, f, y, z, θl)
+		@info "∇2ll_f" ∇2ll_f
 
 		# Re-whiten Jacobian and Hessian
 		mul!(∇ll_fw, transpose(L), ∇ll_f)
@@ -185,21 +191,21 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 	L = cholesky(xCx, Val(false)).L
 
 	# Laplace approximation for the latent posterior for the training points
-	fwhat, ∇2lπ_fw = laplace_approx(gp, L, y, θl)
+	fwhat, ∇2lπ_fw = laplace_approx(gp, L, y, z, θl)
 
 	# Evaluate covariance between training and test points
-	xCy = zeros(size(x, 1), size(x2, 1))
-    covariance_function!(xCy, gp, θc, x, x2)
+	xCy = zeros(size(x2, 1), size(x, 1))
+    covariance_function!(xCy, gp, θc, x2, x)
 	yCy = zeros(size(x2, 1), size(x2, 1))
     covariance_function!(yCy, gp, θc, x2)
 
 	# Get the predicted distribution for the test point latents
 	∇ll_f = zeros(length(y))
 	∇2ll_f = zeros(length(y))
-	ll = ∇2ll_f!(∇ll_f, ∇2ll_f, gp.datalik, L*fwhat, z, θl)
+	ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, L*fwhat, y, z, θl)
 
 	μf2 = xCy * ∇ll_f
-	Σf2 = yCy .- ((diagm(0 => ∇2ll_f) * xCx) \ transpose(xCy)) * xCy
+	Σf2 = yCy .- xCy * (∇2lπ_fw \ transpose(xCy))
 
 	return μf2, Σf2
 end

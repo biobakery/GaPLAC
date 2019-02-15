@@ -20,7 +20,7 @@ function mcmcgp(gp::AbstractGP, x, y, z, ϕ, Nsamples)
 			try
 				# Generate one sample
 				copyto!(ϕsamp, ϕ)
-				lπ = sample!(ϕsamp, mcmc, stats)
+				lπ = mcmcsample!(ϕsamp, mcmc, stats)
 				copyto!(ϕ, ϕsamp)
 			catch err
 				@warn(@sprintf("MCMC sample generation failed: %s", string(err)))

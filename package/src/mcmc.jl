@@ -14,10 +14,10 @@ mutable struct MCMCStats
 	# Total gradient function evaluations
     grad_evaluations::Int
 
-    new = MCMCStats(0.0, 0, 0, 0, 0)
+    MCMCStats() = new(0.0, 0, 0, 0, 0)
 end
 
-struct UnivariateSliceMCMC :< AbstractMCMC
+struct UnivariateSliceMCMC <: AbstractMCMC
 	# Target log density
 	# Signature: (x::Vector{Float64}) -> Float64
 	f::Function
@@ -28,7 +28,7 @@ struct UnivariateSliceMCMC :< AbstractMCMC
 end
 
 
-function sample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCStats = MCMCStats())
+function mcmcsample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCStats = MCMCStats())
 	start_t = time_ns()
 	y_x0 = mcmc.f(x)
 	stats.evaluations += 1
