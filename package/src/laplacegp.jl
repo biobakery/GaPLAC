@@ -1,31 +1,5 @@
 
 using LinearAlgebra
-using Distributions
-
-struct LaplaceGP <: AbstractGP
-    # The covariance function
-	# Signature: (x_i::Vector, x_j::Vector, self::Boolean, θc::Vector) -> Real
-    cf::Function # Covariance function used for prediction
-	cftr::Function # Covariance function used for training
-	# Covariance function hyperparameter transformation
-    θc_link::Function
-    # Prior on covariance function hyperparameters
-    θc_prior::Vector{UnivariateDistribution}
-	# Covariance function hyperparameter names
-	θc_names::Vector{String}
-    # Jitter
-    jitter::Float64
-
-    # Data Likelihood
-	# Signature: (f_i::Float64, z_i::Vector, θl::Vector) -> UnivariateDistribution
-	datalik::Function
-    # Data likelihood hyperparameter transformation
-    θl_link::Function
-    # Prior on data likelihood hyperparameters
-    θl_prior::Vector{UnivariateDistribution}
-	# Data likelihood hyperparameter names
-	θl_names::Vector{String}
-end
 
 function θ(gp::LaplaceGP, ϕ)
     return gp.θl_link(ϕ[1:length(gp.θl_prior)]),
@@ -36,7 +10,6 @@ function ∇θ(gp::LaplaceGP, ϕ)
 	θld, θcd = θ([ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
     return value.(θld), value.(θcd), partials.(θld,1), partials.(θcd,1)
 end
-
 
 function covariance_function!(C::Matrix, gp::LaplaceGP, θc, x)
 	for i in 1:size(x,1)
@@ -160,9 +133,9 @@ end
 
 function invlink(gp::LaplaceGP, θ_target)
 	# Bisecting search for ϕ which produces θ
-	minv = -1000
-	maxv = 1000
-	while any((maxv .- minv) .> 2.0 * max(eps.(minv), eps(maxv)))
+	minv = repeat([-1000.0], inner=length(θ_target))
+	maxv = repeat([1000.0], inner=length(θ_target))
+	while any((maxv .- minv) .> 2.0 * max(eps.(minv), eps.(maxv)))
 		midv = (maxv .+ minv) ./ 2.0
 		θ_mid = vcat(θ(gp, midv)...)
 		maxv[θ_mid .> θ_target] .= midv[θ_mid .> θ_target]
