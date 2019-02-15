@@ -34,7 +34,6 @@ function parse_cmdline()
         "select"
             help = "Output model selection parameters; requires --mcmc and --mcmc2"
             action = :command
-
         "--log"
             help = "Direct logging output to a file"
     end
@@ -45,7 +44,6 @@ function parse_cmdline()
             required = true
         "--data", "-x"
             help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-            default = "stdin"
             required = true
         "--bind", "-b"
             help = "Name bindings, format is \"name=value;...\""
@@ -87,7 +85,6 @@ function parse_cmdline()
             required = true
         "--data", "-x"
             help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-            default = "stdin"
             required = true
         "--bind", "-b"
             help = "Name bindings, format is \"name=value;...\""
@@ -117,7 +114,6 @@ function parse_cmdline()
             required = true
         "--data", "-x"
             help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-            default = "stdin"
         "--bind", "-b"
             help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
@@ -146,7 +142,6 @@ function parse_cmdline()
             required = true
         "--data", "-x"
             help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-            default = "stdin"
             required = true
         "--bind", "-b"
             help = "Name bindings, format is \"name=value;...\""
@@ -247,15 +242,15 @@ function read_data(data)
 end
 
 function read_atdata(args)
-    if haskey(args, "atdata") && haskey(args, "at")
+    if !isa(args["atdata"], Nothing) && !isa(args["at"], Nothing)
         error("--atdata and --at are mutually exclusive")
     end
 
     # --atdata has the same format as --data
-    haskey(args, "atdata") && return read_data(args[:atdata])
+    !isa(args["atdata"], Nothing) && return read_data(args[:atdata])
 
     # --at or --atdata must be specified
-    !haskey(args, "at") && error("Expected --atdata or --at")
+    isa(args["at"], Nothing) && error("Expected --atdata or --at")
 
     # Split into name=value pairs
     df = DataFrame()
@@ -311,10 +306,10 @@ function filter_outliers(data, parsedgp, method)
 
     # What fields to use?
     outl_fields = parsedgp.xvars
-    if haskey(args, "outlier_fields")
+    if !isa(args["outlier_fields"], Nothing)
         outl_fields = unique(cat(outl_fields, split(args[:outlier_fields], ";")))
     end
-    if haskey(args, "outlier_ignore")
+    if !isa(args["outlier_ignore"], Nothing)
         ignore = split(args[:outlier_ignore], ";")
         outl_fields = [x for x in outl_fields if !(x in ignore)]
     end
@@ -364,7 +359,7 @@ end
 function read_gp_data(args)
     # Read in input data
     data = DataFrame()
-    if haskey(args, "data")
+    if !isa(args["data"], Nothing)
         data = read_data(args["data"])
     end
 
@@ -406,7 +401,7 @@ function cmd_mcmc(args)
     parsedgp, x, y, z = read_gp_data(args)
 
     # Extend a chain?
-    if haskey(args, "mcmc")
+    if !isa(args["mcmc"], Nothing)
         chain1 = read_mcmc(args["mcmc"])
         start_θ = chain1[end, gp.chain_names()]
         burnin = 0
@@ -433,7 +428,7 @@ function cmd_predict(args)
     gp, x, y, z = read_gp_data(args)
 
     # Use fit hyperparameters?
-    if haskey(args, "mcmc")
+    if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
     else
         # TODO: make a Chains object with only one record which contains the
@@ -463,7 +458,7 @@ function cmd_sample(args)
     parsedgp, x, y, z = read_gp_data(args)
 
     # Use fit hyperparameters?
-    if haskey(args, "mcmc")
+    if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
 
         # Pick a random set of hyperparameters from the MCMC chain
@@ -488,14 +483,14 @@ function cmd_fitplot(args)
     gp, x, y, z = read_gp_data(args)
 
     # Use fit hyperparameters?
-    if haskey(args, "mcmc")
+    if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
     else
         mcmc = Chains()
     end
 
     # For each GP component, output fit plots
-    if haskey(args, "component")
+    if !isa(args["component"], Nothing)
         # TODO
     end
 
@@ -508,8 +503,8 @@ end
 
 function cmd_select(args)
     # Load chains
-    !haskey(args, "mcmc") && error("Expected --mcmc")
-    !haskey(args, "mcmc2") && error("Expected --mcmc2")
+    isa(args["mcmc"], Nothing) && error("Expected --mcmc")
+    isa(args["mcmc2"], Nothing) && error("Expected --mcmc2")
     mcmc = read_mcmc(args["mcmc"])
     mcmc2 = read_mcmc(args["mcmc2"])
 
@@ -525,15 +520,15 @@ function processcmd(args)
     # Process commands
     cmd = args["%COMMAND%"]
     if cmd == "sample"
-        cmd_sample(args)
+        cmd_sample(args[cmd])
     elseif cmd == "predict"
-        cmd_predict(args)
+        cmd_predict(args[cmd])
     elseif cmd == "mcmc"
-        cmd_mcmc(args)
+        cmd_mcmc(args[cmd])
     elseif cmd == "select"
-        cmd_select(args)
+        cmd_select(args[cmd])
     elseif cmd == "fitplot"
-        cmd_fitplot(args)
+        cmd_fitplot(args[cmd])
     end
 end
 
@@ -542,7 +537,7 @@ end
 args = parse_cmdline()
 
 # Redirect logging to a file if necessary
-if haskey(args, "log")
+if !isa(args["log"], Nothing)
     io = open(args["log"], "w+")
     logger = SimpleLogger(io)
     global_logger(logger)
@@ -555,7 +550,35 @@ end
 processcmd(args)
 
 # Clean up
-if haskey(args, "log")
+if !isa(args["log"], Nothing)
     flush(io)
     close(io)
 end
+
+#=
+cmd_sample(Dict(
+    "formula" => "y : Gaussian(0.01) ~| SExp(t;l=1.5)",
+    "data" =>
+    help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
+"--bind", "-b"
+    help = "Name bindings, format is \"name=value;...\""
+"--rmv_outliers"
+    help = "Outlier removal method for training data (none|fence)"
+    default = "fence"
+"--outlier_fields"
+    help = ";-separated list of additional fields to include in outlier removal"
+    default = ""
+"--outlier_ignore"
+    help = ";-separated list of fields to ignore for outlier removal"
+    default = ""
+"--mcmc", "-m"
+    help = "MCMC samples for hyperparameters, does NOT support --data format flags"
+"--atdata", "-t"
+    help = "Data files providing variable values at which to sample the GP"
+"--at"
+    help = "Sample at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
+"--output", "-o"
+    help = "Output filename, accepts \"stdout\", supports --data format flags"
+    default = "stdout"
+))
+=#
