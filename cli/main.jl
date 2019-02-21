@@ -1,4 +1,5 @@
 
+using Plots
 using Logging
 using CSV
 using Printf
@@ -133,6 +134,10 @@ function parse_cmdline()
         "--output", "-o"
             help = "Output filename, accepts \"stdout\", supports --data format flags"
             default = "stdout"
+        "--plot"
+            help = "Output filename for the sample plots"
+        "--plotx"
+            help = "X axis of the sample plot; can also be \"x:group\" to provide a grouping variable as well"
     end
 
     @add_arg_table s["fitplot"] begin
@@ -172,9 +177,6 @@ function parse_cmdline()
     return parse_args(s)
 end
 
-
-function include_workhorse()
-end
 
 function read_data(data)
     df = DataFrame()
@@ -260,58 +262,84 @@ function read_atdata(args)
 
     # Split into name=value pairs
     df = DataFrame()
-    for nameexpr in split(args[:at], ";")
+    for nameexpr in split(args["at"], ";")
         # name = value
-        m = match(r"^(?<name>[^=]+?) *(?<split>\*?) *= *(?<expr>.*)$", nameexpr)
+        m = match(r"^(?<name>[^=]+?) *(/(?<group>[^=]+))? *= *(?<expr>.*)$", nameexpr)
         isa(m, Nothing) &&
             error("Format for --at is ;-separated \'<name> = <expression>\'")
 
         # Evaluate
         name = Symbol(m[:name])
         valuefun = genfun(Meta.parse(m[:expr]), names(df))
-        value = valuefun([df[i] for i in 1:size(df)[2]]...)
+        value = Base.invokelatest(valuefun, [df[i] for i in 1:size(df)[2]]...)
 
         # What is it?
         if isa(value, Number)
             # Simple value - just assign
             df[name] = value
-            !isa(m[:group], Nothing) && @warn @sprintf("Grouping %s is not meaningful for simple values in --at")
-        elseif isa(value, Vector)
+        elseif isa(value, Vector) || isa(value, UnitRange) || isa(value, StepRange) || isa(value, StepRangeLen)
             # Vector - ensure size is correct and assign
+            value = collect(value)
             if !isa(m[:group], Nothing)
-                isempty(df) && error()
-
+                isempty(df) && error("--at cannot have a grouped variable as the first variable")
+                groupfun = genfun(Meta.parse(m[:group]), names(df))
+                group = Base.invokelatest(groupfun, [df[i] for i in 1:size(df)[2]]...)
+                unq_group = unique(group)
+                if length(unq_group) == length(group)
+                    # Unique groups - expand
+                    df = repeat(df, inner=length(value))
+                    df[name] = repeat(value, outer=length(group))
+                else
+                    # Non-unique groups - fill in
+                    n = sum(group .== unq_group[1])
+                    values = repeat(value[1], inner=size(df)[1])
+                    n != length(value) && error("Values must have the same length as the groups")
+                    for ug in unq_group
+                        mask = group .== ug
+                        n != sum(mask) && error(@sprintf("Grouping variable %s has unequal group lengths", m[:group]))
+                        values[mask] = value
+                    end
+                    df[name] = values
+                end
             elseif isempty(df) || length(value) == size(df)[1]
                 df[name] = value
             else
-                error("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1])
+                error(@sprintf("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1]))
             end
         elseif isa(value, UnivariateDistribution)
             # Distribution - draw random values
             df[name] = rand.(repeat(value, inner=size(df)[1]))
-            !isa(m[:group], Nothing) && @warn @sprintf("Grouping %s is not meaningful for distributions in --at")
         else
             error(@sprintf("Unknown value in --at for %s: %s", name, m[:expr]))
         end
     end
-end
 
---at person=1:3;time*=
+    return df
+end
 
 function atdata_inputs(args, parsedgp)
     # Get the data frame for the target datapoints
-    atdata = read_atdata(args, parsedgp)
+    atdata = read_atdata(args)
 
     # Build GP inputs for the target data
+    @info "size" size(atdata)
     x, z = gp_inputs(parsedgp, atdata)
+    @info "xz" x z
 
     # Make a dataframe of variables used so we can output that for target samples
-    index = atdata[union(parsedgp.xvars, parsedgp.zvars)]
+    vars = union(parsedgp.xvars, parsedgp.zvars)
+    index = atdata[[(name in vars) for name in names(atdata)]]
 
-    return df, x, z, index
+    return atdata, x, z, index
 end
 
 function filter_outliers(data, parsedgp, args)
+    if size(data)[1] == 0
+        # If there's no data, don't log anything related to outlier filtering
+        return data
+    end
+
+    # How to filter outliers
     method = args["rmv_outliers"]
     if method == "none"
         @info "Outlier filtering disabled"
@@ -384,10 +412,6 @@ function read_gp_data(args)
     iscat = [!(typeof(data[i][1]) <: Number) for i in 1:size(data,2)]
     parsedgp = parse_gp_formula(args["formula"], varnames, iscat)
 
-    # Include work functions now so that these functions are built AFTER
-    # the parsed GP formula functions
-    include_workhorse()
-
     # Filter outliers
     data = filter_outliers(data, parsedgp, args)
 
@@ -414,6 +438,41 @@ function write_tabular(df, filename)
     CSV.write(file, df, delim=delim)
 end
 
+function make_sampleplot(args, data, y)
+    # Get the time and group vectors based on --plotx
+    time, group = [], []
+    if isa(args["plotx"], Nothing)
+        nunq = [length(unique(data[i])) for i in 1:size(data)[2]]
+        time = data[findfirst(nunq.==maximum(nunq))]
+        group = zeros(length(time))
+    else
+        m = match(r"^(?<time>.*?) *(: *(?<group>.*))?$", args["plotx"])
+        !(string(m[:time]) in string.(names(data))) && error("X dimension of plot is not a variable given to --at or --atdata")
+        time = data[Symbol(m[:time])]
+        group = if isa(m[:group], Nothing)
+            zeros(length(time))
+        else
+            !(string(m[:group]) in string.(names(data))) && error("Grouping variable for plot is not a variable given to --at or --atdata")
+            data[Symbol(m[:group])]
+        end
+    end
+
+    # Make the plot!
+    plt = plot(size=(500,400))
+    unq_group = unique(group)
+    for ug in unq_group
+        # Separate line for each group
+        mask = group .== ug
+        tg = time[mask]
+        yg = y[mask]
+        I = sortperm(tg)
+        plot!(plt, tg[I], yg[I])
+    end
+
+    # Dump to file
+    savefig(plt, args[:plot])
+end
+
 
 
 function cmd_mcmc(args)
@@ -421,10 +480,10 @@ function cmd_mcmc(args)
     parsedgp, x, y, z = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_mcmc_cont, args)
+    Base.invokelatest(cmd_mcmc_cont, args, parsedgp, x, y, z)
 end
 
-function cmd_mcmc_cont(args)
+function cmd_mcmc_cont(args, parsedgp, x, y, z)
     # Extend a chain?
     if !isa(args["mcmc"], Nothing)
         chain1 = read_mcmc(args["mcmc"])
@@ -453,10 +512,10 @@ function cmd_predict(args)
     gp, x, y, z = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_predict_cont, args)
+    Base.invokelatest(cmd_predict_cont, args, parsedgp, x, y, z)
 end
 
-function cmd_predict_cont(args)
+function cmd_predict_cont(args, parsedgp, x, y, z)
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -488,10 +547,10 @@ function cmd_sample(args)
     parsedgp, x, y, z = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_sample_cont, args)
+    Base.invokelatest(cmd_sample_cont, args, parsedgp, x, y, z)
 end
 
-function cmd_sample_cont(args)
+function cmd_sample_cont(args, parsedgp, x, y, z)
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -507,7 +566,14 @@ function cmd_sample_cont(args)
     tdata, x2, z2, index = atdata_inputs(args, parsedgp)
 
     # Sample the GP
-    y2 = samplegp(gp, ϕ, x, y, z, x2, z2)
+    @info "input" x2 z2
+    f2, y2 = samplegp(parsedgp.gp, ϕ, x, y, z, x2, z2)
+    @info "output" f2 y2
+
+    # Output a plot
+    if !isa(args["plot"], Nothing)
+        make_sampleplot(args, tdata, y2)
+    end
 
     # Output the sampled values
     write_tabular(hcat(index, DataFrame(y=y2)), args["output"])
@@ -518,10 +584,10 @@ function cmd_fitplot(args)
     gp, x, y, z = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_fitplot_cont, args)
+    Base.invokelatest(cmd_fitplot_cont, args, parsedgp, x, y, z)
 end
 
-function cmd_fitplot_cont(args)
+function cmd_fitplot_cont(args, parsedgp, x, y, z)
 
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)

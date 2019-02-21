@@ -135,11 +135,13 @@ function invlink(gp::LaplaceGP, θ_target)
 	# Bisecting search for ϕ which produces θ
 	minv = repeat([-1000.0], inner=length(θ_target))
 	maxv = repeat([1000.0], inner=length(θ_target))
-	while any((maxv .- minv) .> 2.0 * max(eps.(minv), eps.(maxv)))
+	n = 0
+	while any((maxv .- minv) .> 4.0 * max(eps.(minv), eps.(maxv))) && n < 64
 		midv = (maxv .+ minv) ./ 2.0
 		θ_mid = vcat(θ(gp, midv)...)
 		maxv[θ_mid .> θ_target] .= midv[θ_mid .> θ_target]
 		minv[θ_mid .< θ_target] .= midv[θ_mid .< θ_target]
+		n += 1
 	end
 
 	return maxv
