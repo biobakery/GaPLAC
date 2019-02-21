@@ -8,6 +8,10 @@ using ArgParse
 
 include("../package/src/gp.jl")
 include("../package/src/formula.jl")
+include("../package/src/chains.jl")
+include("../package/src/mcmc.jl")
+include("../package/src/mcmcgp.jl")
+include("../package/src/laplacegp.jl")
 
 
 function parse_cmdline()
@@ -97,7 +101,7 @@ function parse_cmdline()
         "--atdata", "-t"
             help = "Data files providing variable values at which to make predictions"
         "--at"
-            help = "Predict at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
+            help = "Predict at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value OR variable=Julia distribution OR variable/group=value"
         "--output", "-o"
             help = "Output filename, accepts \"stdout\", supports --data format flags"
             default = "stdout"
@@ -125,7 +129,7 @@ function parse_cmdline()
         "--atdata", "-t"
             help = "Data files providing variable values at which to sample the GP"
         "--at"
-            help = "Sample at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value"
+            help = "Predict at these points (alternative to tdata); format: ;-separated variable=start:step:end OR variable=value OR variable=Julia distribution OR variable/group=value"
         "--output", "-o"
             help = "Output filename, accepts \"stdout\", supports --data format flags"
             default = "stdout"
@@ -170,10 +174,6 @@ end
 
 
 function include_workhorse()
-    include("../package/src/chains.jl")
-    include("../package/src/mcmc.jl")
-    include("../package/src/mcmcgp.jl")
-    include("../package/src/laplacegp.jl")
 end
 
 function read_data(data)
@@ -262,7 +262,7 @@ function read_atdata(args)
     df = DataFrame()
     for nameexpr in split(args[:at], ";")
         # name = value
-        m = match(r"^(?<name>[^=]+?) *= *(?<expr>.*)$", nameexpr)
+        m = match(r"^(?<name>[^=]+?) *(?<split>\*?) *= *(?<expr>.*)$", nameexpr)
         isa(m, Nothing) &&
             error("Format for --at is ;-separated \'<name> = <expression>\'")
 
@@ -275,9 +275,13 @@ function read_atdata(args)
         if isa(value, Number)
             # Simple value - just assign
             df[name] = value
+            !isa(m[:group], Nothing) && @warn @sprintf("Grouping %s is not meaningful for simple values in --at")
         elseif isa(value, Vector)
             # Vector - ensure size is correct and assign
-            if isempty(df) || length(value) == size(df)[1]
+            if !isa(m[:group], Nothing)
+                isempty(df) && error()
+
+            elseif isempty(df) || length(value) == size(df)[1]
                 df[name] = value
             else
                 error("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1])
@@ -285,11 +289,14 @@ function read_atdata(args)
         elseif isa(value, UnivariateDistribution)
             # Distribution - draw random values
             df[name] = rand.(repeat(value, inner=size(df)[1]))
+            !isa(m[:group], Nothing) && @warn @sprintf("Grouping %s is not meaningful for distributions in --at")
         else
             error(@sprintf("Unknown value in --at for %s: %s", name, m[:expr]))
         end
     end
 end
+
+--at person=1:3;time*=
 
 function atdata_inputs(args, parsedgp)
     # Get the data frame for the target datapoints
@@ -413,6 +420,11 @@ function cmd_mcmc(args)
     # Load training data and GP
     parsedgp, x, y, z = read_gp_data(args)
 
+    # Refresh the world age before continuing command processing
+    Base.invokelatest(cmd_mcmc_cont, args)
+end
+
+function cmd_mcmc_cont(args)
     # Extend a chain?
     if !isa(args["mcmc"], Nothing)
         chain1 = read_mcmc(args["mcmc"])
@@ -440,6 +452,11 @@ function cmd_predict(args)
     # Load training data and GP
     gp, x, y, z = read_gp_data(args)
 
+    # Refresh the world age before continuing command processing
+    Base.invokelatest(cmd_predict_cont, args)
+end
+
+function cmd_predict_cont(args)
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -470,6 +487,11 @@ function cmd_sample(args)
     # Load training data and GP
     parsedgp, x, y, z = read_gp_data(args)
 
+    # Refresh the world age before continuing command processing
+    Base.invokelatest(cmd_sample_cont, args)
+end
+
+function cmd_sample_cont(args)
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -494,6 +516,12 @@ end
 function cmd_fitplot(args)
     # Load training data and GP
     gp, x, y, z = read_gp_data(args)
+
+    # Refresh the world age before continuing command processing
+    Base.invokelatest(cmd_fitplot_cont, args)
+end
+
+function cmd_fitplot_cont(args)
 
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
