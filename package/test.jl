@@ -21,3 +21,15 @@ plot(t, y, size = (300, 200))
 savefig("./gp.pdf")
 
 gp = parse_gp_formula("y*Reads/100 : Binomial(Reads) ~| Cat(Person) * SExp(Time) + Noise", ["Time", "y", "Reads", "Person"], [false, false, false, true])
+
+
+function foo(f)
+    f() + 1
+end
+
+function watest()
+    f = eval(:(()->1))
+    return Base.invokelatest(foo, f)
+end
+
+watest()
