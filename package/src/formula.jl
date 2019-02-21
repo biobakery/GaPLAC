@@ -175,6 +175,15 @@ covariance_functions = Dict(
             dt = ($ti - $tj) / $l
             exp(-(dt * dt))
         end
+    ),
+    "Periodic" =>  CovarianceFunction(
+        1, false,
+        [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive),
+         Parameter("ϕ", "Period", 1, Exponential(1), param_positive)],
+        (ti, tj, l, ϕ) -> quote
+            cdt = cos(($ti - $tj) * (π / $ϕ))
+            exp(-(cdt*cdt)/$l)
+        end
     )
 )
 
@@ -295,16 +304,16 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
 
     # Turn the data likelihood into an actual Julia function
     datalik = genfun(lik_ex, [:f, :z, :θ])
-    θl_link = genfun(θl_link_ex, [:θ])
+    θl_link = genfun(Expr(:vect, θl_link_ex...), [:θ])
     zfun = generate_generator(zalloc, zex)
 
     # Turn the covariance function into an actual Julia function
     cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
-    θc_link = genfun(θc_link_ex, [:θ])
+    θc_link = genfun(Expr(:vect, θc_link_ex...), [:θ])
     xfun = generate_generator(xalloc, xex)
 
     # Record parse results
-    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θc_names Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names Covariance=cf_ex
+    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θl_names Lik_Start=θl Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names CF_Start=θc Covariance=cf_ex
 
     # Generate the GP object
     gp = LaplaceGP(
@@ -317,7 +326,7 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
         yfun, yvars, yformula,
         zfun, allocated(zalloc), [getvariables(ex, zalloc) for ex in zex], znames,
         gp, comps,
-        θl, θc)
+        θc, θl)
 end
 
 function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
@@ -326,7 +335,7 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
 
     # Evaluate x
     xdata = data[pf.xfun_params]
-    x = vcat([pf.xfun(((xdata[i,j] for j in 1:size(xdata)[2])...,)) for i in 1:size(xdata)[1]]...)
+    x = vcat([transpose(pf.xfun((xdata[i,j] for j in 1:size(xdata)[2])...)) for i in 1:size(xdata)[1]]...)
 
     # Evaluate y if all fields are available
     y = []
@@ -337,7 +346,7 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
 
     # Evaluate z
     zdata = data[pf.zfun_params]
-    z = vcat([pf.zfun(((zdata[i,j] for j in 1:size(zdata)[2])...,)) for i in 1:size(zdata)[1]]...)
+    z = vcat([transpose(pf.zfun((zdata[i,j] for j in 1:size(zdata)[2])...)) for i in 1:size(zdata)[1]]...)
 
     return x, z, y
 end
@@ -385,7 +394,7 @@ function parse_lik(s::String, zalloc::VarAllocator)
     θ_prior = θ_prior[.!fixed]
 
     # Evaluate link and names
-    θ_link_expr = Expr(:vect, [p.generate_link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]...)
+    θ_link_expr = [p.generate_link(:(θ[$i])) for (i, p) in enumerate(params[.!fixed])]
     θ_names = [@sprintf("θl[%s]", p.name) for p in params[.!fixed]]
 
     # Generate the expression

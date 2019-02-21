@@ -33,3 +33,7 @@ function watest()
 end
 
 watest()
+
+
+gp = parse_gp_formula("y : Gaussian(.01) ~| Cat(person) * SExp(time)", ["person", "time"], [false, false])
+x, z, y = gp_inputs(gp, DataFrame(person=1:4, time=5:8))
