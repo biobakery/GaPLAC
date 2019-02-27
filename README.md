@@ -5,6 +5,18 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 
 ## Installation
 
+1. Install [Julia](https://julialang.org/).
+
+2. Download GaPLAC's repository and unpack it somewhere.
+
+3. Open a console in GaPLAC's root folder and run `julia`
+
+4. At the Julia prompt, enter:
+```
+]activate .
+instantiate
+```
+
 ## Generating some sample data
 
 ***generate and plot some sample data using `sample`***
@@ -77,7 +89,7 @@ The `observation` can be any Julia expression of the input variables. The `covar
 
 ### Squared-exponential
 
-`gaplac sample "y ~| Cat(person) * SExp(time; l=1)" --at "person=1:4;time/person=-5:0.1:5" --plot sample_plot.png --plotx time:person`
+`gaplac sample "y :Gaussian(0.01) ~| Cat(person) * SExp(time; l=1)" --at "person=1:4;time/person=-5:0.1:5" --plot sample_plot.png --plotx time:person`
 
 ### Periodic
 
