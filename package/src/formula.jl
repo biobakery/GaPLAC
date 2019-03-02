@@ -97,6 +97,7 @@ end
 #  $param, likelihood parameter
 
 data_likelihoods = Dict(
+    "None" => Likelihood(0, [], () -> :(Normal(f, 1e-6))),
     "Gaussian" => Likelihood(
         0, # number of fields in z
         [Parameter("η", "StDev", 0.1, Exponential(1.0), param_positive)],
@@ -333,22 +334,38 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
     # Utility function to get the GP input variables from a data frame and a
     # parsed GP formula
 
-    # Evaluate x
-    xdata = data[pf.xfun_params]
-    x = vcat([transpose(pf.xfun((xdata[i,j] for j in 1:size(xdata)[2])...)) for i in 1:size(xdata)[1]]...)
+    if !isempty(data)
+        n = size(data)[1]
 
-    # Evaluate y if all fields are available
-    y = []
-    if all([(p in names(data)) for p in pf.yfun_params])
-        ydata = data[pf.yfun_params]
-        y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+        # Evaluate x
+        x = x = zeros(n, 0)
+        if !isempty(pf.xnames)
+            xdata = data[pf.xfun_params]
+            x = vcat([transpose(pf.xfun((xdata[i,j] for j in 1:size(xdata)[2])...)) for i in 1:size(xdata)[1]]...)
+        end
+
+        # Evaluate y if all fields are available
+        y = []
+        if all([(p in names(data)) for p in pf.yfun_params])
+            ydata = data[pf.yfun_params]
+            y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+        end
+
+        # Evaluate z
+        z = zeros(n, 0)
+        if !isempty(pf.znames)
+            zdata = data[pf.zfun_params]
+            z = vcat([transpose(pf.zfun((zdata[i,j] for j in 1:size(zdata)[2])...)) for i in 1:size(zdata)[1]]...)
+        end
+
+        return x, z, y
+    else
+        # Separate codepath for empty data so no problems occur if data has no columns
+        x = zeros(0, length(pf.xnames))
+        y = zeros(0)
+        z = zeros(0, length(pf.znames))
+        return x, z, y
     end
-
-    # Evaluate z
-    zdata = data[pf.zfun_params]
-    z = vcat([transpose(pf.zfun((zdata[i,j] for j in 1:size(zdata)[2])...)) for i in 1:size(zdata)[1]]...)
-
-    return x, z, y
 end
 
 function parse_lik(s::String, zalloc::VarAllocator)
@@ -374,7 +391,7 @@ function parse_lik(s::String, zalloc::VarAllocator)
     θ = [p.default for p in params]
     θ_prior = convert(Array{ContinuousUnivariateDistribution}, [p.def_prior for p in params])
 
-    if isempty(s)
+    if isempty(s) || s[1] == '~'
         if lik.z_inputs > 0
             error("Expected input metadata")
         end
@@ -405,7 +422,7 @@ end
 
 function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xalloc, toplevel)
     # Returns cf_ex, s, overallneedsparam
-    # Modifies θ, θ_prior, θ_names, θ_link_ex, xex, xnames
+    # Modifies θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xalloc
 
     cf_ex = :()
     cfprod_ex = :()

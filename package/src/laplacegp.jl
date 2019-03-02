@@ -66,7 +66,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 
 		# Evaluate first and second derivatives of the likelihood at f
 		ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, f, y, z, θl)
-		@info "∇2ll_f" ∇2ll_f
+		@debug "∇2ll_f" ∇2ll_f
 
 		# Re-whiten Jacobian and Hessian
 		mul!(∇ll_fw, transpose(L), ∇ll_f)
@@ -84,10 +84,10 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 		# Slow if we're actually getting worse
 		α = lπ2 < lπ ? 0.5 : 1.0
 		lπ = lπ2
-		@info (i, lπ)
+		@debug (i, lπ)
 
 		E = eigen(∇2lπ_fw)
-		@info "Eigs", E.values
+		@debug "Eigs", E.values
 		if any(E.values .> -1.0)
 			# We're in an indefinite part of the parameter space, or where the
 			# Hessian has dangerously low curvature
@@ -104,7 +104,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 			#ldiv!(dfw, ∇2ll_fw, ∇ll_fw)
 			dfw .= ∇2lπ_fw \ ∇lπ_fw
 			lπgain = -transpose(dfw) * ∇2lπ_fw * dfw
-			@info "Gain" lπgain
+			@debug "Gain" lπgain
 			lπgain < lπtol && break # stop when we gain too little from another step
 		end
 
@@ -224,7 +224,7 @@ function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
 	f_samp = rand(MvNormal(μf2, Σf2))
 
 	# Sample the data likelihood
-	y_samp = rand.([gp.datalik(f_samp[i], z2[i], θl) for i in eachindex(z2)])
+	y_samp = rand.([gp.datalik(f_samp[i], z2[i,:], θl) for i in eachindex(f_samp)])
 
 	return y_samp, f_samp
 end
