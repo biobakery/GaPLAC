@@ -317,22 +317,6 @@ function read_atdata(args)
     return df
 end
 
-function atdata_inputs(args, parsedgp)
-    # Get the data frame for the target datapoints
-    atdata = read_atdata(args)
-
-    # Build GP inputs for the target data
-    @info "size" size(atdata)
-    x, z = gp_inputs(parsedgp, atdata)
-    @info "xz" x z
-
-    # Make a dataframe of variables used so we can output that for target samples
-    vars = union(parsedgp.xvars, parsedgp.zvars)
-    index = atdata[[(name in vars) for name in names(atdata)]]
-
-    return atdata, x, z, index
-end
-
 function filter_outliers(data, parsedgp, args)
     if size(data)[1] == 0
         # If there's no data, don't log anything related to outlier filtering
@@ -398,32 +382,60 @@ function write_mcmc(chain, filename, append)
     write_chains(chain, file, append=append)
 end
 
-function read_gp_data(args)
+function read_gp_data(args, need_at=false)
     # Read in input data
     data = DataFrame()
     if !isa(args["data"], Nothing)
         data = read_data(args["data"])
+    else
+        @info "No training points specified"
+    end
+    atdata = DataFrame()
+    if need_at
+        atdata = read_atdata(args)
     end
 
     # Parse the formula
     isa(args["formula"], Nothing) && error("--formula expected")
     @info @sprintf("Formula: %s", args["formula"])
-    varnames = string.(names(data))
-    iscat = [!(typeof(data[i][1]) <: Number) for i in 1:size(data,2)]
+    varnames = []
+    iscat = []
+    if !isempty(data)
+        varnames = string.(names(data))
+        iscat = [!(typeof(data[i][1]) <: Number) for i in 1:size(data,2)]
+    elseif !isempty(atdata)
+        varnames = string.(names(atdata))
+        iscat = [!(typeof(atdata[i][1]) <: Number) for i in 1:size(atdata,2)]
+    end
     parsedgp = parse_gp_formula(args["formula"], varnames, iscat)
 
     # Filter outliers
     data = filter_outliers(data, parsedgp, args)
 
+    return parsedgp, data, atdata
+end
+
+function gen_gp_inputs(parsedgp, data)
+    # Transform to GP training vectors x, y, z
+    x, z, y = gp_inputs(parsedgp, data)
+    return x, y, z
+end
+
+function gen_gp_inputs(parsedgp, data, atdata)
     # Transform to GP training vectors x, y, z
     x, z, y = gp_inputs(parsedgp, data)
 
-    return parsedgp, x, y, z
+    # Get target data matrices
+    x2, z2 = gp_inputs(parsedgp, atdata)
+    vars = union(parsedgp.xfun_params, parsedgp.zfun_params)
+    index = atdata[[(name in vars) for name in names(atdata)]]
+
+    return x, y, z, x2, z2, index
 end
 
-function write_tabular(df, filename)
+function write_tabular(df, filespec)
     # (#?[,~]?ID?:)?filename
-    m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>.*):)?(?<file>[^:]*)$", file)
+    m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>.*):)?(?<file>[^:]*)$", filespec)
 
     # Break into parts
     filename = m[:file]
@@ -434,17 +446,24 @@ function write_tabular(df, filename)
     tr && error("Transposed output is currently not supported")
 
     # Write data
-    file = filename == "stdin" ? stdin : filename
-    CSV.write(file, df, delim=delim)
+    if filename == "stdout"
+        # CSV.write calls seek on the file, so for stdout which doesn't
+        # support seed, we need a different call
+        CSV.write(stdout, df, delim=delim, append=true, writeheader=true)
+    else
+        CSV.write(filename, df, delim=delim)
+    end
 end
 
-function make_sampleplot(args, data, y)
+function make_sampleplot(args, data, y, parsedgp)
     # Get the time and group vectors based on --plotx
-    time, group = [], []
+    time, group, xlab = [], [], "x"
     if isa(args["plotx"], Nothing)
         nunq = [length(unique(data[i])) for i in 1:size(data)[2]]
-        time = data[findfirst(nunq.==maximum(nunq))]
+        ni = findfirst(nunq.==maximum(nunq))
+        time = data[ni]
         group = zeros(length(time))
+        xlab = names(data)[ni]
     else
         m = match(r"^(?<time>.*?) *(: *(?<group>.*))?$", args["plotx"])
         !(string(m[:time]) in string.(names(data))) && error("X dimension of plot is not a variable given to --at or --atdata")
@@ -455,10 +474,11 @@ function make_sampleplot(args, data, y)
             !(string(m[:group]) in string.(names(data))) && error("Grouping variable for plot is not a variable given to --at or --atdata")
             data[Symbol(m[:group])]
         end
+        xlab = string(m[:time])
     end
 
     # Make the plot!
-    plt = plot(size=(500,400))
+    plt = plot(size=(600,400), legend=false, xlabel=xlab, ylabel=parsedgp.yname)
     unq_group = unique(group)
     for ug in unq_group
         # Separate line for each group
@@ -470,20 +490,23 @@ function make_sampleplot(args, data, y)
     end
 
     # Dump to file
-    savefig(plt, args[:plot])
+    savefig(plt, args["plot"])
 end
 
 
 
 function cmd_mcmc(args)
     # Load training data and GP
-    parsedgp, x, y, z = read_gp_data(args)
+    parsedgp, data = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_mcmc_cont, args, parsedgp, x, y, z)
+    Base.invokelatest(cmd_mcmc_cont, args, parsedgp, data)
 end
 
-function cmd_mcmc_cont(args, parsedgp, x, y, z)
+function cmd_mcmc_cont(args, parsedgp, data)
+    # Get GP inputs
+    x, y, z = gen_gp_inputs(parsedgp, data)
+
     # Extend a chain?
     if !isa(args["mcmc"], Nothing)
         chain1 = read_mcmc(args["mcmc"])
@@ -509,13 +532,16 @@ end
 
 function cmd_predict(args)
     # Load training data and GP
-    gp, x, y, z = read_gp_data(args)
+    parsedgp, data, atdata = read_gp_data(args, true)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_predict_cont, args, parsedgp, x, y, z)
+    Base.invokelatest(cmd_predict_cont, args, parsedgp, data, atdata)
 end
 
-function cmd_predict_cont(args, parsedgp, x, y, z)
+function cmd_predict_cont(args, parsedgp, data, atdata)
+    # Get GP inputs
+    x, y, z, x2, z2, index = gen_gp_inputs(parsedgp, data, atdata)
+
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -524,9 +550,6 @@ function cmd_predict_cont(args, parsedgp, x, y, z)
         # parsed GP hyperparameters
         error("predict from non-fit parameters is NYI")
     end
-
-    # Where to predict?
-    tdata, x2, z2, index = atdata_inputs(args, parsedgp)
 
     # Perform the prediction
     μ_pred, σ2_pred, Q_pred, f_pred, σ2_pred =
@@ -544,13 +567,16 @@ end
 
 function cmd_sample(args)
     # Load training data and GP
-    parsedgp, x, y, z = read_gp_data(args)
+    parsedgp, data, atdata = read_gp_data(args, true)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_sample_cont, args, parsedgp, x, y, z)
+    Base.invokelatest(cmd_sample_cont, args, parsedgp, data, atdata)
 end
 
-function cmd_sample_cont(args, parsedgp, x, y, z)
+function cmd_sample_cont(args, parsedgp, data, atdata)
+    # Get GP inputs
+    x, y, z, x2, z2, index = gen_gp_inputs(parsedgp, data, atdata)
+
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
@@ -562,32 +588,29 @@ function cmd_sample_cont(args, parsedgp, x, y, z)
         ϕ = invlink(parsedgp.gp, vcat(parsedgp.θl, parsedgp.θc))
     end
 
-    # Where to sample?
-    tdata, x2, z2, index = atdata_inputs(args, parsedgp)
-
     # Sample the GP
-    @info "input" x2 z2
-    f2, y2 = samplegp(parsedgp.gp, ϕ, x, y, z, x2, z2)
-    @info "output" f2 y2
+    y2, f2 = samplegp(parsedgp.gp, ϕ, x, y, z, x2, z2)
 
     # Output a plot
     if !isa(args["plot"], Nothing)
-        make_sampleplot(args, tdata, y2)
+        make_sampleplot(args, atdata, y2, parsedgp)
     end
 
     # Output the sampled values
-    write_tabular(hcat(index, DataFrame(y=y2)), args["output"])
+    write_tabular(hcat(index, DataFrame(y=y2, f=f2)), args["output"])
 end
 
 function cmd_fitplot(args)
     # Load training data and GP
-    gp, x, y, z = read_gp_data(args)
+    parsedgp, data = read_gp_data(args)
 
     # Refresh the world age before continuing command processing
-    Base.invokelatest(cmd_fitplot_cont, args, parsedgp, x, y, z)
+    Base.invokelatest(cmd_fitplot_cont, args, parsedgp, data)
 end
 
-function cmd_fitplot_cont(args, parsedgp, x, y, z)
+function cmd_fitplot_cont(args, parsedgp, data)
+    # Get GP inputs
+    x, y, z = gen_gp_inputs(parsedgp, data)
 
     # Use fit hyperparameters?
     if !isa(args["mcmc"], Nothing)

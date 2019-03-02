@@ -89,7 +89,7 @@ The `observation` can be any Julia expression of the input variables. The `covar
 
 ### Squared-exponential
 
-`gaplac sample "y :Gaussian(0.01) ~| Cat(person) * SExp(time; l=1)" --at "person=1:4;time/person=-5:0.1:5" --plot sample_plot.png --plotx time:person`
+`gaplac sample "y :None ~| Cat(person) * SExp(time; l=1)" --at "person=1:4;time/person=-5:0.1:5" --plot sample_plot.png --plotx time:person`
 
 ### Periodic
 

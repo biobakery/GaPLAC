@@ -9,6 +9,7 @@ include("src/bf.jl")
 
 gp = parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])
 
+
 t = collect(-5.:0.1:5.)
 f, y = samplegp(gp.gp, [], [], [], [], t, t)
 
@@ -37,3 +38,13 @@ watest()
 
 gp = parse_gp_formula("y : Gaussian(.01) ~| Cat(person) * SExp(time)", ["person", "time"], [false, false])
 x, z, y = gp_inputs(gp, DataFrame(person=1:4, time=5:8))
+
+cmd_sample(Dict(
+    "data" => nothing,
+    "atdata" => nothing,
+    "mcmc" => nothing,
+    "output" => "stdout",
+    "formula" => "y:None ~| 1(1) * Cat(person) * SExp(time; l=1)",
+    "at" => "person=1:3;time/person=range(-5,5,length=6)",
+    "plot" => "sampleplot.png",
+    "plotx" => "time:person"))
