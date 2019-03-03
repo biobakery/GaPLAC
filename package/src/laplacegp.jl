@@ -1,5 +1,6 @@
 
 using LinearAlgebra
+using ForwardDiff
 
 function θ(gp::LaplaceGP, ϕ)
     return gp.θl_link(ϕ[1:length(gp.θl_prior)]),
@@ -139,8 +140,9 @@ function invlink(gp::LaplaceGP, θ_target)
 	while any((maxv .- minv) .> 4.0 * max(eps.(minv), eps.(maxv))) && n < 64
 		midv = (maxv .+ minv) ./ 2.0
 		θ_mid = vcat(θ(gp, midv)...)
-		maxv[θ_mid .> θ_target] .= midv[θ_mid .> θ_target]
-		minv[θ_mid .< θ_target] .= midv[θ_mid .< θ_target]
+		gt = θ_mid .> θ_target
+		maxv[gt] .= midv[gt]
+		minv[.!gt] .= midv[.!gt]
 		n += 1
 	end
 
@@ -164,23 +166,33 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 
 	# Factorize
 	L = cholesky(xCx, Val(false)).L
+	@info "L" L
 
 	# Laplace approximation for the latent posterior for the training points
 	fwhat, ∇2lπ_fw = laplace_approx(gp, L, y, z, θl)
+	@info "fhat" L*fwhat
 
 	# Evaluate covariance between training and test points
 	xCy = zeros(size(x2, 1), size(x, 1))
     covariance_function!(xCy, gp, θc, x2, x)
+	@debug "xCy" xCy
 	yCy = zeros(size(x2, 1), size(x2, 1))
     covariance_function!(yCy, gp, θc, x2)
 
 	# Get the predicted distribution for the test point latents
 	∇ll_f = zeros(length(y))
 	∇2ll_f = zeros(length(y))
-	ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, L*fwhat, y, z, θl)
+	fhat = L * fwhat
+	ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, fhat, y, z, θl)
 
-	μf2 = xCy * ∇ll_f
-	Σf2 = yCy .- xCy * (∇2lπ_fw \ transpose(xCy))
+	@debug "∇2ll_f" ∇2ll_f
+
+	# TODO: This was filled in with the naive formulas - this can be simplified
+	# and the inv's can be removed
+	ixCx = inv(xCx)
+	μf2 = xCy * ixCx * fhat
+	Σf2 = yCy .- xCy * (ixCx .- ixCx*inv(ixCx.+diagm(0=>∇2ll_f))*ixCx) * transpose(xCy)
+	@debug "tr(Σf2)" diag(Σf2)
 
 	return μf2, Σf2
 end
@@ -221,7 +233,11 @@ function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
 	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
 
 	# Sample the latents at the target points
-	f_samp = rand(MvNormal(μf2, Σf2))
+	# Uses eigendecomposition to allow positive semi-definite covariance
+	# matrices (could be optimized)
+	E = eigen(Σf2)
+	L = real.(E.vectors) * diagm(0 => sqrt.(max.(real.(E.values), 0.0)))
+	f_samp = L * randn(length(μf2)) .+ μf2
 
 	# Sample the data likelihood
 	y_samp = rand.([gp.datalik(f_samp[i], z2[i,:], θl) for i in eachindex(f_samp)])
