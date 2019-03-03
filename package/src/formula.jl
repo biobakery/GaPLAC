@@ -245,7 +245,8 @@ function sanitize_var_name(name)
     return replace(name, r"[^A-Za-z0-9_]" => "_")
 end
 
-function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Array{Bool})
+function parse_gp_formula(formula::String, var_names::Array{String},
+    var_cat::Array{Bool}; def_lik::String = "Gaussian")
     # Main entrypoint for parsing a GP formula
     # Uses a simple hand-rolled recursive descent parser
 
@@ -282,7 +283,7 @@ function parse_gp_formula(formula::String, var_names::Array{String}, var_cat::Ar
         end
         s = s[2:end]
     else
-        lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names = parse_lik("Gaussian", zalloc)
+        lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names = parse_lik(def_lik, zalloc)
     end
     if s[1] != '|'
         error("Expected ~|")
@@ -348,7 +349,7 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
         y = []
         if all([(p in names(data)) for p in pf.yfun_params])
             ydata = data[pf.yfun_params]
-            y = [pf.yfun(((ydata[i,j] for j in 1:size(ydata)[2])...,)) for i in 1:size(ydata)[1]]
+            y = [pf.yfun((ydata[i,j] for j in 1:size(ydata)[2])...) for i in 1:size(ydata)[1]]
         end
 
         # Evaluate z

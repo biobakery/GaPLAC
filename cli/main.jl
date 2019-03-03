@@ -49,7 +49,7 @@ function parse_cmdline()
             help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
-            default = "fence"
+            default = "none"
         "--outlier_fields"
             help = ";-separated list of additional fields to include in outlier removal"
             default = ""
@@ -90,7 +90,7 @@ function parse_cmdline()
             help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
-            default = "fence"
+            default = "none"
         "--outlier_fields"
             help = ";-separated list of additional fields to include in outlier removal"
             default = ""
@@ -118,7 +118,7 @@ function parse_cmdline()
             help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
-            default = "fence"
+            default = "none"
         "--outlier_fields"
             help = ";-separated list of additional fields to include in outlier removal"
             default = ""
@@ -151,7 +151,7 @@ function parse_cmdline()
             help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
-            default = "fence"
+            default = "none"
         "--outlier_fields"
             help = ";-separated list of additional fields to include in outlier removal"
             default = ""
@@ -196,9 +196,11 @@ function read_data(data)
         id = isa(m[:id], Nothing) ? "" : m[:id]
 
         # Read the data
-        file = filename == "stdin" ? stdin : filename
+        file = filename == "stdin" ? stdin : string(filename)
         tbl = CSV.read(file, transpose=tr, delim=delim)
-        @info @sprintf("Read %s %s%s", delim=="," ? "CSV" : "TSV", file, tr ? " (transposed)" : "")
+        @info @sprintf("Read %s %s%s (%d samples with %d features)",
+            delim=="," ? "CSV" : "TSV", file, tr ? " (transposed)" : "",
+            size(tbl,1), size(tbl,2))
 
         if isempty(df)
             if id == ""
@@ -331,7 +333,7 @@ function filter_outliers(data, parsedgp, args)
     end
 
     # What fields to use?
-    outl_fields = string.(parsedgp.xvars...)
+    outl_fields = string.([union(parsedgp.xfun_params, parsedgp.yfun_params)...])
     if !isa(args["outlier_fields"], Nothing)
         outl_fields = unique(vcat(outl_fields, split(args["outlier_fields"], ";")))
     end
@@ -345,7 +347,7 @@ function filter_outliers(data, parsedgp, args)
     if method == "fence"
         @info "Outlier filtering using inner fences"
         f = x -> begin
-            xnn = x[!isnan(x)]
+            xnn = x[.!isnan.(x)]
             q1, q3 = Statistics.quantile(xnn, 0.25), Statistics.quantile(xnn, 0.75)
             iqr = q3 - q1
             (x .> q3 + 1.5 * iqr) .| (x .< q1 - 1.5 * iqr)
@@ -356,11 +358,11 @@ function filter_outliers(data, parsedgp, args)
 
     # Which samples are outliers?
     outlier = falses(size(outl_df)[1])
-    for i in 1:size(outl_df)[1]
+    for i in 1:size(outl_df)[2]
         if isa(outl_df[i], String)
             @info @sprintf("Skipping %s for outlier removal (categorical)", names(outl_df)[i])
         else
-            outlier_i = !isnan(outl_df[i]) .& f(outl_df[i])
+            outlier_i = .!isnan.(outl_df[i]) .& f(outl_df[i])
             outlier .|= outlier_i
             @info @sprintf("%d outliers identified in %s", sum(outlier_i), names(outl_df)[i])
         end
