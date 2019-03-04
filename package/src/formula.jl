@@ -299,7 +299,7 @@ function parse_gp_formula(formula::String, var_names::Array{String},
     if occursin(r"^\s*0\s*$", s)
         cf_ex = :(0.)
         s = ""
-        comps = Array{Component,1}()
+        comps = Array{GPComponent,1}()
     else
         cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
     end
