@@ -52,8 +52,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 
 	# Saddle-free Newton's method to find posterior mode for whitened latents fw
 	f, fw = zeros(length(y)), zeros(length(y))
-	∇ll_f, ∇ll_fw = zeros(length(y)), zeros(length(y))
-	∇lπ_fw = zeros(length(y))
+	∇ll_f, ∇lπ_fw = zeros(length(y)), zeros(length(y))
 	∇2ll_f, ∇2ll_fw = zeros(length(y)), zeros(length(y), length(y))
 	∇2ll_fw_temp = zeros(length(y), length(y))
 	∇2lπ_fw, ∇2lπ_fw_reg = zeros(length(y), length(y)), zeros(length(y), length(y))
@@ -67,10 +66,10 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 
 		# Evaluate first and second derivatives of the likelihood at f
 		ll = ∇2ll_f!(gp, ∇ll_f, ∇2ll_f, f, y, z, θl)
-		@debug "∇2ll_f" ∇2ll_f
+		@debug "W" ∇ll_f ∇2ll_f
 
 		# Re-whiten Jacobian and Hessian
-		mul!(∇ll_fw, transpose(L), ∇ll_f)
+		mul!(∇lπ_fw, transpose(L), ∇ll_f)
 		# Slow formula: ∇2ll_fw = transpose(L) * Diagonal(∇2ll_f) * L
 		mul!(∇2ll_fw_temp, diagm(0 => ∇2ll_f), L)
 		mul!(∇2lπ_fw, transpose(L), ∇2ll_fw_temp)
@@ -104,6 +103,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 			# How much of a gain do we expect?
 			#ldiv!(dfw, ∇2ll_fw, ∇ll_fw)
 			dfw .= ∇2lπ_fw \ ∇lπ_fw
+			@debug "dfw" ∇2lπ_fw ∇lπ_fw dfw
 			lπgain = -transpose(dfw) * ∇2lπ_fw * dfw
 			@debug "Gain" lπgain
 			lπgain < lπtol && break # stop when we gain too little from another step
@@ -111,7 +111,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 
 		# Newton step
 		if i < maxN
-			fw .-= α * (∇2ll_fw_reg \ ∇ll_fw)
+			fw .-= α * (∇2lπ_fw_reg \ ∇lπ_fw)
 		else
 			@warn "maxN reached in Newton steps"
 		end
