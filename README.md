@@ -1,7 +1,6 @@
-
 # Guide
 
-This guide is intended to provide an overview of the basic workflow using GaPLAC. A complete command reference is provided below.
+This guide is intended to provide an overview of the basic workflow using GaPLAC. A complete command reference, as well as available covariance and likelihood functions are provided below.
 
 ## Installation
 
@@ -9,17 +8,34 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 
 2. Download GaPLAC's repository and unpack it somewhere.
 
-3. Open a console in GaPLAC's root folder and run `julia`
+3. Open a console in GaPLAC's root folder and run `julia`.
 
-4. At the Julia prompt, enter:
-```
-]activate .
-instantiate
-```
+4. At the Julia prompt, enter `]activate .`, then `instantiate`. This will install the required packages. Use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
 
 ## Generating some sample data
 
-***generate and plot some sample data using `sample`***
+GaPLAC has five main commands to work with: `sample`, `mcmc`, `select`, `predict`, and `fitplot`. We will first look at `sample`, which simply draws a sample from a Gaussian Process. This can be helpful to visualize the kinds of functions described by a particular GP, or in this case to provide some sample data to work with in the later functions.
+
+Run the following command from the GaPLAC root folder:
+
+```
+julia ./cli/main.jl sample "y :~| SExp(x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
+```
+
+This should produce a plot in `gp_sample.png` which resembles:
+
+![Wavy line](img/guide1.png)
+
+Let's look at each of the pieces of the command:
+
+- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`.
+- `--at "x=-5:0.1:5"`: This tells GaPLAC what values of `x` to sample the GP at.
+- `--plot gp_sample.png`: Output the pretty plot here.
+
+Try changing the lengthscale of the `SExp` term. How does this affect the function? Try adding other components (the full list is at the end of this document) by adding them to the formula, such as an Ornstein-Uhlenbeck process (`OU(x; l=1)`), or simply some `Noise`.
+
+
+
 
 ## Fitting parameters
 
@@ -112,4 +128,5 @@ The `observation` can be any Julia expression of the input variables. The `covar
 ### Predictions
 
 ![picture](img/abc.png)
+
 
