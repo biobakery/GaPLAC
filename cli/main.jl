@@ -13,6 +13,7 @@ include("../package/src/chains.jl")
 include("../package/src/mcmc.jl")
 include("../package/src/mcmcgp.jl")
 include("../package/src/laplacegp.jl")
+include("../package/src/directgp.jl")
 
 
 function parse_cmdline()
