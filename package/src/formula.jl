@@ -275,9 +275,19 @@ function parse_gp_formula(formula::String, var_names::Array{String},
 
     # Parse the likelihood (optional)
     zalloc = VarAllocator(variablenames, var_cat)
+    directgp = false
     if final == ':'
-        lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, s = parse_lik(s, zalloc)
         s = chompw(s)
+        if s[1] != '~'
+            lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, s = parse_lik(s, zalloc)
+            s = chompw(s)
+        else
+            directgp = true
+            lik_ex = :f
+            zex, znames = [], []
+            θl, θl_prior = [], []
+            θl_link_ex, θl_names = [], []
+        end
         if isempty(s) || s[1] != '~'
             error("Expected ~ after data likelihood.")
         end
@@ -304,24 +314,33 @@ function parse_gp_formula(formula::String, var_names::Array{String},
         cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
     end
 
-    # Turn the data likelihood into an actual Julia function
-    datalik = genfun(lik_ex, [:f, :z, :θ])
-    θl_link = genfun(Expr(:vect, θl_link_ex...), [:θ])
+    # Record parse results
+    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θl_names Lik_Start=θl Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names CF_Start=θc Covariance=cf_ex
+
+    # GP input generators
+    xfun = generate_generator(xalloc, xex)
     zfun = generate_generator(zalloc, zex)
 
     # Turn the covariance function into an actual Julia function
     cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
     θc_link = genfun(Expr(:vect, θc_link_ex...), [:θ])
-    xfun = generate_generator(xalloc, xex)
 
-    # Record parse results
-    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θl_names Lik_Start=θl Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names CF_Start=θc Covariance=cf_ex
+    if directgp
+        # No data likelihood - use simpler GP structure
+        gp = DirectGP(
+            cf, cf, # Training and prediction cfs are the same
+            θc_link, θc_prior, θc_names, 1e-9)
+    else
+        # Turn the data likelihood into an actual Julia function
+        datalik = genfun(lik_ex, [:f, :z, :θ])
+        θl_link = genfun(Expr(:vect, θl_link_ex...), [:θ])
 
-    # Generate the GP object
-    gp = LaplaceGP(
-        cf, cf, # Training and prediction cfs are the same
-        θc_link, θc_prior, θc_names, 1e-9,
-        datalik, θl_link, θl_prior, θl_names)
+        # Generate the GP object
+        gp = LaplaceGP(
+            cf, cf, # Training and prediction cfs are the same
+            θc_link, θc_prior, θc_names, 1e-9,
+            datalik, θl_link, θl_prior, θl_names)
+    end
 
     return ParsedGPFormula(
         xfun, allocated(xalloc), [getvariables(ex, xalloc) for ex in xex], xnames,
