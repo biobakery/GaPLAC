@@ -1,0 +1,1 @@
+julia --project=@. ./cli/main.jl %*
