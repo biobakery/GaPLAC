@@ -164,12 +164,12 @@ covariance_functions = Dict(
         1, false, [],
         (cati, catj) -> :($cati == $catj ? 1.0 : 0.0)
     ),
-    "OU" =>  CovarianceFunction(
+    "OU" => CovarianceFunction(
         1, false,
         [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive)],
         (ti, tj, l) -> :(exp(-abs($ti - $tj) / $l))
     ),
-    "SExp" =>  CovarianceFunction(
+    "SExp" => CovarianceFunction(
         1, false,
         [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive)],
         (ti, tj, l) -> quote
@@ -177,14 +177,18 @@ covariance_functions = Dict(
             exp(-(dt * dt))
         end
     ),
-    "Periodic" =>  CovarianceFunction(
+    "Periodic" => CovarianceFunction(
         1, false,
         [Parameter("l", "LengthScale", 0.1, Exponential(1), param_positive),
-         Parameter("ϕ", "Period", 1, Exponential(1), param_positive)],
-        (ti, tj, l, ϕ) -> quote
-            cdt = cos(($ti - $tj) * (π / $ϕ))
+         Parameter("p", "Period", 1, Exponential(1), param_positive)],
+        (ti, tj, l, p) -> quote
+            cdt = cos(($ti - $tj) * (π / $p))
             exp(-(cdt*cdt)/$l)
         end
+    ),
+    "Linear" => CovarianceFunction(
+        1, false, [],
+        (xi, xj) -> :($xi * $xj)
     )
 )
 
