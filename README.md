@@ -85,8 +85,16 @@ This will give us a second set of model fit results in a new `mcmc_ou.tsv` file.
 
 This will compare the log posterior values stored in each of the MCMC chains, and summarize them as a [Bayes Factor](https://en.wikipedia.org/wiki/Bayes_factor), which is reported in log2 scale. Here, log2 Bayes Factors greater than 1 indicate that the first model (in this case the Squared-Exponential) should be preferred, while negative numbers indicate the opposite - that the second model (passed by `--mcmc2`) should be preferred.
 
-
 ## Diagnostic plots
+
+GaPLAC also has the capability to automatically generate several plots showing the correspondence between the data and the model fit. These are automatically generated based on the model formula. These plots are generated with the `fitplot` command, passing it the formula, the data, and the MCMC chain:
+
+```
+./gaplac fitplot "y ~| SExp(x)" --data data.tsv --mcmc mcmc.tsv --output fitplots.pdf
+```
+
+Take a look at the output in `fitplots.pdf`.
+
 
 # Command reference
 
@@ -221,7 +229,7 @@ A slow-varying component can be added to a rapid component:
 
 Suppose you have an experiment with mice. Mice are often grouped into cages, and there is often a very strong cage effect. We can model this as a hierarchical model with one component describing the changes within a cage, and another component describing the individual mouse's differences from the cage mean:
 
-`./gaplac sample "y :~| Cat(cage) * (SExp(x; l=2) + Cat(mouse) * SExp(x; l=0.5) * Constant(0.1))" --at "mouse=1:9;cage=floor((mouse-1)/3);x/mouse=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+`./gaplac sample "y :~| Cat(cage) * (SExp(x; l=2.5) + Cat(mouse) * SExp(x; l=0.3) * Constant(0.05))" --at "mouse=1:9;cage=floor.((mouse.-1)./3);x/mouse=-5:0.1:5" --plot sample_plot.png --plotx x:mouse`
 
 ### "Global" effects
 
@@ -233,6 +241,5 @@ Suppose you have an experiment with mice. Mice are often grouped into cages, and
 
 ### Predictions
 
-![picture](img/abc.png)
 
 
