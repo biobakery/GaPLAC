@@ -532,7 +532,7 @@ function parse_cf_expression(s, θ, θ_prior, θ_names, θ_link_ex, xex, xnames,
         elseif s[1] == '('
             # Read the subexpression
             new_ex, s, needsparamsub = parse_cf_expression(
-                s[2:end], θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xvars, xalloc, false)
+                s[2:end], θ, θ_prior, θ_names, θ_link_ex, xex, xnames, xalloc, false)
         else
             error(@sprintf("Unexpected symbol in covariance function formula: %s", s[1]))
         end
