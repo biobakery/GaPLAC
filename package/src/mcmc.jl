@@ -36,7 +36,7 @@ function mcmcsample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCSt
 	for i = 1:mcmc.N
 		for k = eachindex(x)
 			# Set up the window
-			lb, ub = -mcmc.w, mcmc.w
+			lb, ub = -mcmc.w[k], mcmc.w[k]
 			sy = y_x0 + log(rand())
 
 			# Shrink until we're inside the slice
@@ -47,7 +47,7 @@ function mcmcsample!(x::AbstractVector, mcmc::UnivariateSliceMCMC, stats::MCMCSt
 				dx[k] = lb + rand() * (ub - lb)
 
 				# Are we inside?
-				yn = llfun(x .+ dx)
+				yn = mcmc.f(x .+ dx)
 				stats.evaluations += 1
 				yn >= sy && break # Yup
 

@@ -35,8 +35,9 @@ function θ(gp::LaplaceGP, ϕ)
 end
 
 function ∇θ(gp::LaplaceGP, ϕ)
-	θld, θcd = θ([ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
-    return value.(θld), value.(θcd), partials.(θld,1), partials.(θcd,1)
+	θld, θcd = θ(gp, [ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
+    return ForwardDiff.value.(θld), ForwardDiff.value.(θcd),
+		ForwardDiff.partials.(θld,1), ForwardDiff.partials.(θcd,1)
 end
 
 function covariance_function!(C::Matrix, gp::LaplaceGP, θc, x)
@@ -152,10 +153,10 @@ function record!(gp::LaplaceGP, chains::Chains, ϕ)
     θl, θc = θ(gp, ϕ)
 
 	for i in eachindex(θl)
-		record!(chains, Symbol(θl_names[i]), θl[i])
+		record!(chains, Symbol(gp.θl_names[i]), θl[i])
 	end
 	for i in eachindex(θc)
-		record!(chains, Symbol(θc_names[i]), θc[i])
+		record!(chains, Symbol(gp.θc_names[i]), θc[i])
 	end
 end
 
@@ -284,12 +285,12 @@ function logposterior(gp::LaplaceGP, ϕ, x, y, z)
     L = cholesky(C, Val(false)).L
 
 	# Laplace approximation of the latent posterior
-	fw, ∇2ll_fw, ll = laplace_approx(gp, L, θl)
+	fw, ∇2ll_fw, ll = laplace_approx(gp, L, y, z, θl)
 
 	# Get the determinant of the covariance matrix from the cholesky
 	# transform of the negative Hessian
-	for i in 1:Nf
-		for j in i:Nf
+	for i in 1:length(fw)
+		for j in i:length(fw)
 			# Negate and ensure symmetry
 			∇2ll_fw[i,j] = ∇2ll_fw[j,i] = -(∇2ll_fw[i,j] + ∇2ll_fw[j,i]) / 2
 		end
@@ -301,8 +302,8 @@ function logposterior(gp::LaplaceGP, ϕ, x, y, z)
 	ll += (log(2*π) + ldetΣ) / 2
 
     # Log prior
-    lp = sum(logpdf.(θl_prior, θl) .+ log.(dθl_dϕl)) +
-	     sum(logpdf.(θc_prior, θc) .+ log.(dθc_dϕc))
+    lp = sum(logpdf.(gp.θl_prior, θl) .+ log.(dθl_dϕl)) +
+	     sum(logpdf.(gp.θc_prior, θc) .+ log.(dθc_dϕc))
 
     # Return log prior and log lik separately
     return lp, ll
