@@ -10,6 +10,7 @@ mutable struct Chains <: AbstractChains
     df::DataFrame
 
     Chains() = new(DataFrame())
+    Chains(d::DataFrame) = new(d)
 end
 
 
@@ -43,9 +44,9 @@ function newsample!(c::Chains)
 end
 
 # IO
-function read_chains(filename, tsv::Bool = false)
+function read_chains(filename; tsv::Bool = false)
     Chains(CSV.read(filename, delim=tsv ? '\t' : ','))
 end
-function write_chains(c::Chains, filename, tsv::Bool = false, append::Bool = false)
+function write_chains(c::Chains, filename; tsv::Bool = false, append::Bool = false)
     CSV.write(filename, c.df, delim=tsv ? '\t' : ',', append=append)
 end

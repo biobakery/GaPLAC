@@ -59,10 +59,6 @@ function parse_cmdline()
             default = ""
         "--mcmc", "-m"
             help = "MCMC samples for hyperparameters; if provided, the chain will be extended. Does NOT support --data format flags"
-        "--anneal", "-a"
-            help = "Annealed samples"
-            arg_type = Int
-            default = 100
         "--burnin", "-r"
             help = "Burn-in samples"
             arg_type = Int
@@ -311,7 +307,7 @@ function read_atdata(args)
             end
         elseif isa(value, UnivariateDistribution)
             # Distribution - draw random values
-            df[name] = rand.(repeat(value, inner=size(df)[1]))
+            df[name] = rand.(repeat([value], inner=size(df)[1]))
         else
             error(@sprintf("Unknown value in --at for %s: %s", name, m[:expr]))
         end
@@ -377,12 +373,17 @@ end
 
 function read_mcmc(filename)
     file = filename == "stdin" ? stdin : filename
-    return read_chains(file)
+    chain = read_chains(file)
+
+    @info @sprintf("Read %d MCMC samples from %s", size(chain.df,1), filename)
+    return chain
 end
 
 function write_mcmc(chain, filename, append)
     file = filename == "stdout" ? stdout : filename
-    write_chains(chain, file, append=append)
+    write_chains(chain, file; append=append)
+
+    @info @sprintf("%s %d MCMC samples to %s", append ? "Appended" : "Wrote", size(chain.df,1), filename)
 end
 
 function read_gp_data(args, need_at=false)
@@ -454,7 +455,7 @@ function write_tabular(df, filespec)
         # support seed, we need a different call
         CSV.write(stdout, df, delim=delim, append=true, writeheader=true)
     else
-        CSV.write(filename, df, delim=delim)
+        CSV.write(string(filename), df, delim=delim)
     end
 end
 
@@ -515,22 +516,23 @@ function cmd_mcmc_cont(args, parsedgp, data)
         chain1 = read_mcmc(args["mcmc"])
         start_θ = chain1[end, gp.chain_names()]
         burnin = 0
-        anneal = 0
     else
-        start_θ = []
+        start_θ = vcat(parsedgp.θc, parsedgp.θl)
         burnin = args["burnin"]
-        anneal = args["anneal"]
     end
 
+    # Get the properties of the chain
+    thinning = args["thin"]
+    samples = args["samples"]
+
     # Run the chain
-    # TODO
-    chain = gp_mcmc(parsedgp.gp, start_θ)
+    chain = mcmcgp(parsedgp.gp, x, y, z, start_θ, burnin + 1 + thinning * (samples-1))
 
     # Thinning
-    chain = chain[burnin:thin:end]
+    chain = thin(chain, burnin, thinning)
 
     # Output chains
-    write_mcmc(chain, args["output"], !isempty(start_θ))
+    write_mcmc(chain, args["output"], !isa(args["mcmc"], Nothing))
 end
 
 function cmd_predict(args)
