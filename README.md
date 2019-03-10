@@ -10,7 +10,7 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 
 3. Open a console in GaPLAC's root folder and run `julia`.
 
-4. At the Julia prompt, enter `]activate .`, then `instantiate`. This will install the required packages. Use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
+4. At the Julia prompt, press `]` to access the package manager's prompt, then enter `activate .`, and `instantiate`. This will install the required packages. Use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
 
 5. If on Mac/UNIX, to use `./gaplac ...` format, you may need to run `chmod u+x ./gaplac`.
 
@@ -30,16 +30,16 @@ This will produce a large amount of output to the console, and should also produ
 
 Let's look at each of the pieces of the command:
 
-- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (see below) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us here to draw samples from _just_ the Gaussian Process described by the formula, without additional variation from the likelihood.
+- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (see below) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
 - `--at "x=-5:0.1:5"`: This tells GaPLAC what values of `x` to sample the GP at.
-- `--plot gp_sample.png`: Output the pretty plot here.
+- `--plot gp_sample.png`: Plot the dynamics here.
 
 Try changing the lengthscale of the `SExp` term. How does this affect the function? Try adding other components (the full list is at the end of this document) by adding them to the formula, such as an Ornstein-Uhlenbeck process (`OU(x; l=1)`), or simply some `Noise`.
 
 Now let's generate a smaller set of data at some randomly chosen `x` coordinates, and store the results in a file instead of printing to stdout:
 
 ```
-./gaplac sample "y :~| SExp(x; l=1.5)" --at "i=1:50;x=Uniform(-5,5)" --plot gp_sample.png --output data.tsv
+./gaplac sample "y :~| SExp(x; l=1.5)" --at "i=1:50;x=Uniform(-5,5)" --output data.tsv
 ```
 
 Look at the contents of `data.tsv`. It should contain two columns: `x` and `y`, and the rows are not sorted in any way. We will use this data for the next command.
@@ -152,9 +152,13 @@ Syntax: `Cat(x)`
 
 Produces a covariance of `1` between samples with the same `x`, otherwise `0`.
 
-`./gaplac sample "y :~| Cat(k)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+`./gaplac sample "y :~| Cat(k)" --at "k=1:8;x/k=0:1" --plot sample_plot.png --plotx x:k`
 
-Categorical covariance functions are frequently multiplied by another function from the set below. This allows the covariance structure within each category to be described by the function being multiplied in. For example, if making measurements from individual people, we would expect that the measured value from any given person does not change very rapidly (e.g. if modeling weight over time), but different people are independent (i.e. my weight does not affect your weight).
+![Categorical](img/cov_cat.png)
+
+Categorical covariance functions represent the covariation between members of the same group. For example, samples gathered from the same individual will tend to be more similar to each other than samples, which might be represented by `Cat(person)`. Categorical covariance functions are frequently multiplied by another function from the set below, which then describes the dynamics _within_ the group, which is independent from another member of the group (see the discussion below on [multiple time-varying components](#Multiple-time-varying-components)).
+
+The categorical covariance function is also useful for visualizing the possible dynamics of the various covariance functions below, since it can effectively draw independent samples from those covariance functions in a single invocation of GaPLAC. Here, each category `k` produces a different, independent sample from the GP, which is visualized with a different line for each `k` using `--plotx x:k`.
 
 ### Constant
 
@@ -166,6 +170,8 @@ A constant covariance with the given magnitude. The shorthand `1` can be used fo
 
 `./gaplac sample "y :~| Cat(k) * Constant" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
 
+![Constant](img/cov_constant.png)
+
 ### Noise
 
 Syntax: `Noise`
@@ -176,6 +182,8 @@ Syntax: `Noise`
 
 Uncorrelated variation - adds a covariance of `1` only from a sample to itself.
 
+![Noise](img/cov_noise.png)
+
 ### Ornstein-Uhlenbeck
 
 Syntax: `OU(x; l=lengthscale)`
@@ -184,15 +192,17 @@ Syntax: `OU(x; l=lengthscale)`
 
 `./gaplac sample "y :~| Cat(k) * OU(x; l=1)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
 
+![Ornstein-Uhlenbeck](img/cov_ou.png)
+
 ### Squared-exponential
 
 Syntax: `SExp(x; l=lengthscale)`
 
 > k(i,j) = exp(.5*(x[i] - x[i])^2/l^2)
 
-A squared
-
 `./gaplac sample "y :~| Cat(k) * SExp(x; l=1)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+
+![Squared-exponential](img/cov_sexp.png)
 
 ### Periodic
 
@@ -200,12 +210,15 @@ Syntax: `Periodic(x; l=lengthscale, p=period)`
 
 > k(i,j) = exp(.5*(x[i] - x[i])^2/l^2)
 
-`./gaplac sample "y :~| Cat(k) * Periodic(x; l=1, period=2)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+`./gaplac sample "y :~| Cat(k) * Periodic(x; l=0.6, p=2)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+
+![Periodic](img/cov_periodic.png)
 
 Decaying periodicity can be encoded by mixing in an Ornstein-Uhlenbeck or Squared Exponential component:
 
 `./gaplac sample "y :~| Periodic(x; l=0.3, period=1) * SExp(x; l=2)" --at "x=-10:0.1:10" --plot sample_plot.png --plotx x`
 
+![Decaying periodic](img/cov_dperiodic.png)
 
 ### Linear
 
@@ -214,6 +227,8 @@ Syntax: `Linear(x)`
 > k(i,j) = x[i] * x[j]
 
 `./gaplac sample "y :~| Cat(k) * Linear(x)" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+
+![Linear](img/cov_linear.png)
 
 ## More complex functions
 
