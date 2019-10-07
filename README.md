@@ -1,3 +1,4 @@
+
 # Guide
 
 This guide is intended to provide an overview of the basic workflow using GaPLAC. A complete command reference, as well as available covariance and likelihood functions are provided below.
@@ -10,13 +11,13 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 
 3. Open a console in GaPLAC's root folder and run `julia`.
 
-4. At the Julia prompt, press `]` to access the package manager's prompt, then enter `activate .`, and `instantiate`. This will install the required packages. Use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
+4. At the Julia prompt, press `]` to access the package manager's prompt, then enter `activate .`, and `instantiate`. This will install the required packages and may take a few minutes. Once complete, use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
 
 5. If on Mac/UNIX, to use `./gaplac ...` format, you may need to run `chmod u+x ./gaplac`.
 
 ## Generating some sample data
 
-GaPLAC has five main commands to work with: `sample`, `mcmc`, `select`, `predict`, and `fitplot`. We will first look at `sample`, which simply draws a sample from a Gaussian Process. This can be helpful to visualize the kinds of functions described by a particular GP, or in this case to provide some sample data to work with in the later functions.
+GaPLAC has five main commands to work with: `sample`, `mcmc`, `select`, `predict`, and `fitplot`. We will first look at `sample`, which draws a sample from a Gaussian Process. This can be helpful to visualize the kinds of functions described by a particular GP, or to provide some sample data to test later functions.
 
 Run the following command from the GaPLAC root folder:
 
@@ -24,13 +25,15 @@ Run the following command from the GaPLAC root folder:
 ./gaplac sample "y :~| SExp(x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
 ```
 
-This will produce a large amount of output to the console, and should also produce a plot in `gp_sample.png` which resembles:
+This may take a few minutes the first time, since Julia must compile all the packages. It will produce a large amount of output to the console, and should also produce a plot in `gp_sample.png` which resembles:
 
 ![Wavy line](img/guide1.png)
 
+If instead you get an error mentioning missing dependencies, it means that step 4 of the Installation section was not successfully completed. Try following the Installation instructions again to resolve this.
+
 Let's look at each of the pieces of the command:
 
-- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (see below) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
+- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (described later) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
 - `--at "x=-5:0.1:5"`: This tells GaPLAC what values of `x` to sample the GP at.
 - `--plot gp_sample.png`: Plot the dynamics here.
 
@@ -85,48 +88,105 @@ This will give us a second set of model fit results in a new `mcmc_ou.tsv` file.
 
 This will compare the log posterior values stored in each of the MCMC chains, and summarize them as a [Bayes Factor](https://en.wikipedia.org/wiki/Bayes_factor), which is reported in log2 scale. Here, log2 Bayes Factors greater than 1 indicate that the first model (in this case the Squared-Exponential) should be preferred, while negative numbers indicate the opposite - that the second model (passed by `--mcmc2`) should be preferred.
 
-## Diagnostic plots
-
-GaPLAC also has the capability to automatically generate several plots showing the correspondence between the data and the model fit. These are automatically generated based on the model formula. These plots are generated with the `fitplot` command, passing it the formula, the data, and the MCMC chain:
-
-```
-./gaplac fitplot "y ~| SExp(x)" --data data.tsv --mcmc mcmc.tsv --output fitplots.pdf
-```
-
-Take a look at the output in `fitplots.pdf`.
-
-
 # Command reference
 
 ## `sample`
 
+Generate samples from a Gaussian Process.
+```
+./gaplac sample <formula> [options]
+```
+
+Options are:
+* `-x`, `--data`: Input training data; see [Input and output](#input-variables). If specified, the sampled GP is conditional on the provided data.
+* `--rmv_outliers`, `--outlier_fields`, `--outlier_ignore`: [Automatic outlier removal](#automatic-outlier-removal).
+* `-m`, `--mcmc`: If specified, the hyperparameters for the GP to sample are sampled from the given MCMC chain.
+* `-t`, `--atdata`, or `--at`: Independent variables at which to sample the GP; see [Target input variables](#target-input-variables).
+* `-o`, `--output`: Output the sampled GP values to a file. Supports `--data` format specifiers, and can be `stdout`.
+* `--plot`: When present, produces a plot of the sampled GP, automatically attempting to guess the X axis.
+* `--plotx`: Specify the variable to use for the X axis of the plot. This can also be set to `variable:group`.
+
 ## `mcmc`
+
+Generate a MCMC chain of the hyperparameters of a Gaussian Process.
+```
+./gaplac mcmc <formula> [options]
+```
+
+Options are:
+* `-x`, `--data`: Input training data; see [Input and output](#input-variables). If specified, the sampled GP is conditional on the provided data.
+* `--rmv_outliers`, `--outlier_fields`, `--outlier_ignore`: [Automatic outlier removal](#automatic-outlier-removal).
+* `-m`, `--mcmc`: If specified, extends the given chain.
+* `-r`, `--burnin`: Number of burn-in samples to discard (default 0).
+* `-t`, `--thin`: Number of samples to generate per sample output (default 1).
+* `-n`, `--samples`: Number of samples to output (after burn-in and thinning; default: 100).
+* `-o`, `--output`: Output filename to store the chain info in. Supports `stdout`.
 
 ## `select`
 
+Calculate model selection statistics from MCMC chains and output to stdout.
+```
+./gaplac select [options]
+```
+
+Options are:
+* `-m`, `--mcmc`: The first chain to compare.
+* `-c`, `--mcmc2`: The second chain to compare.
+
 ## `predict`
 
+Predict the values of a Gaussian Process at specific points (i.e. calculate the posterior mean and variance at a set of points).
+```
+./gaplac predict <formula> [options]
+```
+
+Options are:
+* `-x`, `--data`: Input training data; see [Input and output](#input-variables). If specified, the predictions are made conditional on the provided data.
+* `--rmv_outliers`, `--outlier_fields`, `--outlier_ignore`: [Automatic outlier removal](#automatic-outlier-removal).
+* `-m`, `--mcmc`: If specified, the prediction is taken over the distribution of hyperparameters in the MCMC chain.
+* `-t`, `--atdata`, or `--at`: Independent variables at which to predict the GP; see [Target input variables](#target-input-variables).
+* `-o`, `--output`: Output the predictions to a file. Supports `--data` format specifiers, and can be `stdout`.
+
 ## `fitplot`
+
+Note: The `fitplot` command is not fully implemented yet.
 
 # Input and output
 
 ## Input variables
 
-The variables which can be used in the formulas are provided to GaPLAC using the `--data` parameter, in the form of a set of tab- or comma-separated tables. The column/row names of these tables are used as the variable names.
+The variables which can be used in the formulas are provided to GaPLAC using the `--data` parameter, in the form of a `;`-separated list of filenames for tab- or comma-separated tables (supports `stdin` as a filename as well). For example:
+```
+--data table1.csv;table2.tsv
+```
 
-***non-conforming variable names***.
+The column/row names of these tables are used as the variable names in the GP formulas. To ensure names are valid Julia identifiers, any non-alphanumeric characters are first transformed into underscores. If the first character is not a letter or an underscore, then `X` is prepended to the name. If a variable is specified in multiple tables, then the table specified earlier in the `--data` list takes precedence.
 
-***--data format***
+Additional flags may also be specified before a `:` before the file names to indicate certain attributes of the files. These are:
+* `#`: Transpose the table, so rows represent variables.
+* `~`: The file is interpreted as a tab-separated file, regardless of extension.
+* `,`: The file is interpreted as a comma-separated file, regardless of extension.
+
+An identifier can also be specified, giving the name of the variable to use to join the tables. If not given, `gaplac` will attempt to guess based on the uniqueness of the values of variables and presence across tables. For example, the following will use the `id` column of `data.tsv` and `subjectid` row of `subjects.tsv`:
+```
+--data id:data.tsv;#subjectid:subjects.tsv
+```
 
 ## Target input variables
 
-***--atdata and --at formats***
+Specifying where to sample or predict a GP can be done in two ways. The first is to provide a file containing the independent variables in the GP. This is specified using `--atdata`, and has the same format as `--data`. The second is to construct this using `--at`, which is a `;`-separated list of `variable=value` pairs specifying the values of the independent variables. These can have several formats:
+* `variable=value`: Set the variable to the given value for all data points. `value` can be a Julia expression.
+* `variable=start:step:end`: Creates a data point for each value in the linear interpolation from `start` to `end`, stepping by `step`.
+* `variable=<Julia Distribution>`: Samples the Julia distribution for each data point.
+* `variable/group=value`: For every value of the previously-defined variable `group`, set `variable` to `value`, which can be a linear interpolation or Julia distribution as above.
 
-## Output
+Variables are added in the order they are specified, so be wary of where distributions are specified. In particular, if they are specified earlier in the variable list, their sampled values may be duplicated across many rows created by interpolations.
 
-***--output format***
+For example, to create a set of "individuals" identified by an `id`, and a linear `time` scale for each individual, you might use `--at id=1:1:10;time/id=0:0.1:10`.
 
-***--plot format***
+## Automatic outlier removal
+
+GaPLAC can automatically filter out outliers based on several criteria. Currently only inner-fence-based outlier detection is supported. This is enabled by setting `--rmv_outliers` to `fence`. By default when this is enabled, all numeric independent variables in the GP are filtered for outliers. If additional variables not included in the GP formula should be included in outlier removal (e.g. if running a null model, but the set of data should still be the same as a full model), these can be specified by `--outlier_fields`. Fields that would normally be included but should not be can be specified by `--outlier_ignore`.
 
 # Gaussian process formulas
 
@@ -164,7 +224,7 @@ The categorical covariance function is also useful for visualizing the possible 
 
 Syntax: `Constant(σ2=magnitude)`
 
-> k(i,j) = 1
+> k(i,j) = σ2
 
 A constant covariance with the given magnitude. The shorthand `1` can be used for this, as in `y ~| 1`.
 
@@ -238,23 +298,47 @@ Covariance functions can be added together, in which case the functions they rep
 
 A slow-varying component can be added to a rapid component:
 
-`./gaplac sample "y :~| Cat(k) * (SExp(x; l=2) + OU(x; l=0.5) * 1(0.1))" --at "k=1:4;x/k=-5:0.1:5" --plot sample_plot.png --plotx x:k`
+`./gaplac sample "y :~| Cat(k) * (SExp(x; l=2) + SExp(x; l=0.3) * Constant(0.3))" --at "k=1:4;x/k=-5:0.05:5" --plot sample_plot.png --plotx x:k`
+
+![Multiple time-varying components](img/multiple_timescales.png)
 
 ### Hierarchical group effects
 
 Suppose you have an experiment with mice. Mice are often grouped into cages, and there is often a very strong cage effect. We can model this as a hierarchical model with one component describing the changes within a cage, and another component describing the individual mouse's differences from the cage mean:
 
-`./gaplac sample "y :~| Cat(cage) * (SExp(x; l=2.5) + Cat(mouse) * SExp(x; l=0.3) * Constant(0.05))" --at "mouse=1:9;cage=floor.((mouse.-1)./3);x/mouse=-5:0.1:5" --plot sample_plot.png --plotx x:mouse`
+`./gaplac sample "y :~| Cat(cage) * (SExp(x; l=2.5) + Cat(mouse) * SExp(x; l=0.3) * Constant(0.03))" --at "mouse=1:9;cage=floor.((mouse.-1)./3);x/mouse=-5:0.05:5" --plot sample_plot.png --plotx x:mouse`
 
-### "Global" effects
+![Cage effect](img/cage_effect.png)
 
 ## Variance parameters
 
-***discuss how variance parameters are handled***
+You may notice that only one covariance function contains an explicit variance hyperparameter: `Constant`. This is done to make the covariance functions more composable (e.g. they can be multiplied together without introducing two variance hyperparameters). However, it would be annoying to have to re-specify a `Constant` covariance function to multiply into every component that needs a variance hyperparameter. To simplify this, GaPLAC will automatically multiply a `Constant` covariance function with any component that does not already have one.
+
+For example, the following formulas are equivalent:
+```
+y :~| SExp(l=3)
+y :~| SExp(l=3) * Constant
+```
+
+If you do not want this `Constant` covariance function to be added (thus adding a variance hyperparameter which will be optimized), multiply in a manual `Constant(1)` covariance function, as in:
+```
+y :~| SExp(l=3) * Constant(1)
+```
+
+## Hyperparameter priors
+
+All covariance function parameters can be optimized by the `mcmc` command. To specify the prior of these variables, set their value to a Julia distribution. For example to set the lengthscale parameter of a Squared Exponential covariance function to a Gamma distribution with shape 2 and scale 3, use the following:
+```
+y :~| SExp(l=Gamma(2,3))
+```
+
+Setting the hyperparameter to a single value sets it to a Delta distribution, and removes it from optimization in `mcmc`. To set the hyperparameter to an initial value *and* set its prior, specify both, as in:
+```
+y :~| SExp(l=1.2, l=Gamma(2,3))
+```
+
+Note that the prior should be specified *after* the initial value.
 
 ## Data likelihoods
 
-### Predictions
-
-
-
+***TODO: list of data likelihoods***
