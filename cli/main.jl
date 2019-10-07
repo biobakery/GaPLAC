@@ -44,10 +44,8 @@ function parse_cmdline()
             help = "Gaussian Process formula"
             required = true
         "--data", "-x"
-            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
+            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;#subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
             required = true
-        "--bind", "-b"
-            help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
             default = "none"
@@ -81,10 +79,8 @@ function parse_cmdline()
             help = "Gaussian Process formula"
             required = true
         "--data", "-x"
-            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
+            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;#subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
             required = true
-        "--bind", "-b"
-            help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
             default = "none"
@@ -110,9 +106,7 @@ function parse_cmdline()
             help = "Gaussian Process formula"
             required = true
         "--data", "-x"
-            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
-        "--bind", "-b"
-            help = "Name bindings, format is \"name=value;...\""
+            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;#subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
             default = "none"
@@ -142,10 +136,8 @@ function parse_cmdline()
             help = "Gaussian Process formula"
             required = true
         "--data", "-x"
-            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;~subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
+            help = "Input data files, accepts \"stdin\". ;-separated, use : to provide additional flags which can be combined: \"#:\" transposes the table, \",:\" reads as CSV, \"~:\" reads as TSV (default). Other characters before : give the column/row to join the tables with, e.g. id:data.tsv;#subjectid:subjects.tsv will use the id column of data.tsv and subjectid row of subjects.tsv."
             required = true
-        "--bind", "-b"
-            help = "Name bindings, format is \"name=value;...\""
         "--rmv_outliers"
             help = "Outlier removal method for training data (none|fence)"
             default = "none"
@@ -551,14 +543,14 @@ function cmd_predict_cont(args, parsedgp, data, atdata)
     if !isa(args["mcmc"], Nothing)
         mcmc = read_mcmc(args["mcmc"])
     else
-        # TODO: make a Chains object with only one record which contains the
-        # parsed GP hyperparameters
-        error("predict from non-fit parameters is NYI")
+        θ = vcat(parsedgp.θc, parsedgp.θl)
+        mcmc = Chains()
+        record!(parsedgp.gp, mcmc, invlink(parsedgp.gp, θ))
     end
 
     # Perform the prediction
     μ_pred, σ2_pred, Q_pred, f_pred, σ2_pred =
-        predict(parsedgp.gp, mcmc, x, y, z, x2;
+        predict(parsedgp.gp, mcmc, x, y, z, x2, z2;
             quantiles=[0.025, 0.05, 0.1, 0.159, 0.5, 0.841, 0.9, 0.95, 0.975])
     prediction = DataFrame(ymu=μ_pred, ystd=sqrt(σ2_pred),
         yQ025=Q_pred[:,1], yQ050=Q_pred[:,2], yQ100=Q_pred[:,3], yQ159=Q_pred[:,4],

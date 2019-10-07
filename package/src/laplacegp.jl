@@ -2,6 +2,7 @@
 using LinearAlgebra
 using ForwardDiff
 using Distributions
+using FastGaussQuadrature
 
 struct LaplaceGP <: AbstractGP
     # The covariance function
@@ -177,12 +178,13 @@ function invlink(gp::LaplaceGP, θ_target)
 	return maxv
 end
 
-function unrecord(gp::LaplaceGP, chains::Chains, ix::Int)
-	# Build the target θ vector
-	θ_target = vcat([getrecords(chains, Symbol(name))[ix] for name in gp.θl_names],
-		[getrecords(chains, Symbol(name))[ix] for name in gp.θc_names])
+function extractθ(gp::LaplaceGP, chains::Chains, ix::Int)
+	return [getrecords(chains, Symbol(name))[ix] for name in gp.θl_names],
+		[getrecords(chains, Symbol(name))[ix] for name in gp.θc_names]
+end
 
-	return invlink(gp, θ_target)
+function unrecord(gp::LaplaceGP, chains::Chains, ix::Int)
+	return invlink(gp, vcat(extractθ(gp, chains, ix)...))
 end
 
 function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
@@ -225,32 +227,80 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 	return μf2, Σf2
 end
 
-function predict(gp::LaplaceGP, ϕ, x, y, z, x2; quantiles)
+function predict(gp::LaplaceGP, mcmc, x, y, z, x2, z2; quantiles=[], detail=15)
+
+	# Get quadrature nodes and weights
+	ghq_nodes, ghq_weights = gausshermite(detail)
+
+	# Replicate a random datalik as a starting point for predicted distributions
+	θl_1, θc_1 = θ(gp, unrecord(mcmc, 1))
+	repeat([gp.datalik(0., z2[1,:], θl_1)], size(x2, 1), size(mcmc.df,1))
+
+	# TODO here
+
 
 	# Separate and transform parameters
     θl, θc = θ(gp, ϕ)
 
 	# Get the latent distribution at the target points given the
 	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
+	σ2f2 = diag(Σf2)
 
-	# Gaussian quadrature to estimate predicted mean and variance at test points
+	# Gauss-Hermite quadrature to estimate predicted mean and variance at test points
 	μ_pred = zeros(size(x2, 1))
 	σ2_pred = zeros(size(x2, 1))
+	Q_pred = zeros(size(x2, 1), length(quantiles))
 	σf = sqrt.(σ2f)
-	for i in 1:size(x2, 1)
-		begin#for <quadrature loop>
-			# Make the prediction
-			#pred = gp.datalik(μf[i] + ??? * σf[i], z[i,:], θl)
+	for i in 1:length(μf2)
+		pred_nodes = [gp.datalik(μf[i] + nx * σf[i], z[i,:], θl) for nx in ghq_nodes]
 
-			# Mix the prediction
-			mean(pred) # TODO
-			var(pred)
+		# Calculate mean
+		μ_node = mean.(pred_nodes)
+		μ = μ_pred[i] = sum(ghq_weights .* μ_node)
+
+		# Calculate variance
+		σ2_node = var.(pred_nodes)
+		σ2 = σ2_pred[i] = sum(ghq_weights .* ((μ_node .- μ).^2 .+ σ2_node))
+
+		# Quantiles
+		σ = sqrt(σ2)
+		for qi in eachindex(quantiles)
+			# Initial guess
+			minx, maxx = μ - σ, μ + σ
+			target_q = quantiles[qi]
+			q(x) = sum(ghq_weights .* cdf.(pred_nodes, x))
+
+			# Expand search region until it encompases the target quantile
+			while q(minx) > target_q
+				minx, maxx = minx - 2 * (maxx - minx), minx
+			end
+			while q(maxx) < target_q
+				minx, maxx = maxx, maxx + 2 * (maxx - minx)
+			end
+
+			# Bisecting search for the quantile
+			for j in 1:36
+				midx = (maxx + minx) / 2
+				qmid = q(midx)
+				if qmid < target_q
+					minx = midx
+				else
+					maxx = midx
+				end
+			end
+
+			# Round to integer if we're close enough
+			qpred = (maxx + minx) / 2
+			if qpred - round(qpred) < 1e-9
+				qpred = round(qpred)
+			end
+
+			# And done..
+			Q_pred[i,qi] = qpred
 		end
-
-		# TODO: Find the quantiles
 	end
 
-	return μ_pred, σ2_pred, Q_pred, μf, σ2f
+	return μ_pred, σ2_pred, Q_pred, μf2, σ2f2
 end
 
 function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
