@@ -14,7 +14,7 @@ include("../package/src/mcmc.jl")
 include("../package/src/mcmcgp.jl")
 include("../package/src/laplacegp.jl")
 include("../package/src/directgp.jl")
-
+include("../package/src/bf.jl")
 
 function parse_cmdline()
     s = ArgParseSettings()
@@ -629,9 +629,6 @@ function cmd_fitplot_cont(args, parsedgp, data)
 end
 
 function cmd_select(args)
-    include("../package/src/chains.jl")
-    include("../package/src/bf.jl")
-
     # Load chains
     isa(args["mcmc"], Nothing) && error("Expected --mcmc")
     isa(args["mcmc2"], Nothing) && error("Expected --mcmc2")
@@ -642,7 +639,6 @@ function cmd_select(args)
     l2bf = log2_bayes_factor(mcmc, mcmc2)
 
     # Output to stdout
-    println("l2bf")
     println(@sprintf("%.3f", l2bf))
 end
 
