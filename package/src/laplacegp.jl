@@ -116,14 +116,22 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 		@debug (i, lπ)
 
 		E = eigen(∇2lπ_fw)
-		@debug "Eigs", E.values
-		if any(E.values .> -1.0)
-			# We're in an indefinite part of the parameter space, or where the
-			# Hessian has dangerously low curvature
-			# Apply a softabs transform on eigenvalues to avoid saddle
-			# points/minima and to regularize small values in the Hessian
-			λ = E.values .* coth.(E.values) # softabs with minimum value 1
-			∇2lπ_fw_reg .= E.vectors * diagm(0 => -λ) * transpose(E.vectors)
+		Evals = E.values
+		Evecs = E.vectors
+		@debug "Eigs", Evals
+        if !all(isreal.(Evals))
+			# Sometimes, floating point accuracy makes the matrix slightly
+			# assymetric, leading to imaginary eigenvalues. Discard them here.
+			Evals = real.(Evals)
+			Evecs = real.(Evecs)
+		end
+		if any(Evals .> -1.0)
+			# We're in a part of the parameter space that has negative,
+			# or where there is dangerously low curvature.
+			# Apply a softabs transform here on eigenvalues to avoid saddle
+			# points/minima and to regularize small values in the Hessian.
+			λ = Evals .* coth.(Evals) # softabs with minimum value 1
+			∇2lπ_fw_reg .= Evecs * diagm(0 => -λ) * transpose(Evecs)
 			@warn "Applying softabs" λ
 		else
 			# We're in a safely-positive definite part of the parameter space
