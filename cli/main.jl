@@ -37,6 +37,9 @@ function parse_cmdline()
             action = :command
         "--log"
             help = "Direct logging output to a file"
+        "--debug"
+            help = "Enable debug logging"
+            action = :store_true
     end
 
     @add_arg_table s["mcmc"] begin
@@ -663,12 +666,13 @@ end
 args = parse_cmdline()
 
 # Redirect logging to a file if necessary
+loglevel = args["debug"] ? Logging.Debug : Logging.Info
 if !isa(args["log"], Nothing)
     io = open(args["log"], "w+")
-    logger = SimpleLogger(io)
+    logger = SimpleLogger(io, loglevel)
     global_logger(logger)
 else
-    logger = ConsoleLogger(show_limited=false)
+    logger = ConsoleLogger(Base.stderr, loglevel; show_limited=false)
     global_logger(logger)
 end
 
