@@ -672,7 +672,7 @@ if !isa(args["log"], Nothing)
     logger = SimpleLogger(io, loglevel)
     global_logger(logger)
 else
-    logger = ConsoleLogger(Base.stderr, loglevel; show_limited=false)
+    logger = ConsoleLogger(stderr, loglevel; show_limited=false)
     global_logger(logger)
 end
 
