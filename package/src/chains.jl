@@ -35,7 +35,7 @@ end
 
 function thin(c::Chains, burnin::Integer, thinning::Integer)
     # Chain thinning
-    Chains(c.df[(burnin+1):thinning:end])
+    Chains(c.df[(burnin+1):thinning:end, :])
 end
 
 function newsample!(c::Chains)

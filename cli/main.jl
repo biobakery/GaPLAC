@@ -201,11 +201,11 @@ function read_data(data)
                 !any(goodkeys) && error(@sprintf("No suitable id field found for %s", file))
                 keyidx = findfirst(goodkeys)
                 @info @sprintf("Using %s for sample ids in %s", names(tbl)[keyidx], file)
-                key = tbl[keyidx]
+                key = tbl[:,keyidx]
             elseif !(Symbol(id) in names(tbl))
                 error(@sprintf("%s is not a field in %s", id, file))
             else
-                key = tbl[Symbol(id)]
+                key = tbl[:,Symbol(id)]
             end
             df = tbl
         else
@@ -217,11 +217,11 @@ function read_data(data)
                 end
                 bestid = indmax(n)
                 id = names(tbl)[bestid]
-                key2 = tbl[bestid]
+                key2 = tbl[:,bestid]
             elseif !(Symbol(id) in names(tbl))
                 error(@sprintf("%s is not a field in %s", id, file))
             else
-                key2 = tbl[Symbol(id)]
+                key2 = tbl[:,Symbol(id)]
             end
 
             # Match samples
@@ -234,7 +234,7 @@ function read_data(data)
             # Merge fields
             for i in 1:size(tbl2)[2]
                 if names(tbl)[i] != Symbol(id)
-                    df[names(tbl)[i]] = tbl2[i]
+                    df[names(tbl)[i]] = tbl2[:,i]
                 end
             end
         end
@@ -265,7 +265,7 @@ function read_atdata(args)
         # Evaluate
         name = Symbol(m[:name])
         valuefun = genfun(Meta.parse(m[:expr]), names(df))
-        value = Base.invokelatest(valuefun, [df[i] for i in 1:size(df)[2]]...)
+        value = Base.invokelatest(valuefun, [df[:,i] for i in 1:size(df)[2]]...)
 
         # What is it?
         if isa(value, Number)
@@ -507,10 +507,10 @@ function cmd_mcmc_cont(args, parsedgp, data)
     x, y, z = gen_gp_inputs(parsedgp, data)
 
     # Extend a chain?
+    burnin = 0
     if !isa(args["mcmc"], Nothing)
         chain1 = read_mcmc(args["mcmc"])
         start_θ = chain1[end, gp.chain_names()]
-        burnin = 0
     else
         start_θ = vcat(parsedgp.θc, parsedgp.θl)
         burnin = args["burnin"]
