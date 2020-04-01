@@ -359,26 +359,33 @@ function gp_inputs(pf::ParsedGPFormula, data::DataFrame)
     # parsed GP formula
 
     if !isempty(data)
-        n = size(data)[1]
+        n = size(data, 1)
 
         # Evaluate x
-        x = x = zeros(n, 0)
-        if !isempty(pf.xnames)
-            xdata = data[pf.xfun_params]
-            x = vcat([transpose(pf.xfun((xdata[i,j] for j in 1:size(xdata)[2])...)) for i in 1:size(xdata)[1]]...)
+        # I'm guessing this line was left over from when you were doing it
+        # interactively. Can definie variables inside if statements in functions
+        # x = x = zeros(n, 0) # ? why 2 x's
+
+        if isempty(pf.xnames)
+            x = zeros(n, 0)
+        else
+            xdata = data[!, pf.xfun_params] # this is view
+            x = vcat([transpose(pf.xfun((xdata[i,j] for j in 1:size(xdata, 2))...)) for i in 1:size(xdata, 1)]...)
         end
 
         # Evaluate y if all fields are available
-        y = []
-        if all([(p in names(data)) for p in pf.yfun_params])
-            ydata = data[pf.yfun_params]
+        if all(p-> p in names(data), pf.yfun_params) # old version allocates, this is short-circuiting
+            ydata = data[!, pf.yfun_params]
             y = [pf.yfun((ydata[i,j] for j in 1:size(ydata)[2])...) for i in 1:size(ydata)[1]]
+        else
+            y = []
         end
 
         # Evaluate z
-        z = zeros(n, 0)
-        if !isempty(pf.znames)
-            zdata = data[pf.zfun_params]
+        if isempty(pf.znames)
+            z = zeros(n, 0)
+        else
+            zdata = data[!, pf.zfun_params]
             z = vcat([transpose(pf.zfun((zdata[i,j] for j in 1:size(zdata)[2])...)) for i in 1:size(zdata)[1]]...)
         end
 
@@ -681,7 +688,7 @@ function parse_params(s, varalloc, θ_params, θ, θ_prior, nvars)
 end
 
 # Some utility functions
-
+# is there a reason not to use `lstrip()`?
 function chompw(s)
     # Chomp whitespace
     i = 1
@@ -703,7 +710,7 @@ end
 function chomp_number(s)
     # Chome a number
     i = 1
-    mt = match(r"^(\-?([0-9]+\.?[0-9]*|\.[0-9]+)([eE]\-?[0-9]+)?)(.*)$", s)
+    mt = match(r"^(\-?(\d+\.?\d*|\.\d+)([eE]\-?\d+)?)(.*)$", s)
     if !isa(mt, Nothing)
         return parse(Float64, mt[1]), mt[4]
     end

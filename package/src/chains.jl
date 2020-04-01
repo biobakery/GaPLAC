@@ -15,8 +15,8 @@ end
 
 
 function getrecords(c::Chains, what)
-	# Get data for a sample
-	c.df[what]
+    # Get data for a sample
+    c.df[!, what] # this returns a view, not a copy. Can use `c.df[:, what]` to get copy
 end
 
 function record!(c::Chains, what::Symbol, value::Float64)
