@@ -10,14 +10,14 @@ using Distributions
 using Statistics
 using ArgParse
 
-include("../package/src/gp.jl")
-include("../package/src/formula.jl")
-include("../package/src/chains.jl")
-include("../package/src/mcmc.jl")
-include("../package/src/mcmcgp.jl")
-include("../package/src/laplacegp.jl")
-include("../package/src/directgp.jl")
-include("../package/src/bf.jl")
+include("../src/gp.jl")
+include("../src/formula.jl")
+include("../src/chains.jl")
+include("../src/mcmc.jl")
+include("../src/mcmcgp.jl")
+include("../src/laplacegp.jl")
+include("../src/directgp.jl")
+include("../src/bf.jl")
 
 function parse_cmdline()
     s = ArgParseSettings()
