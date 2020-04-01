@@ -662,25 +662,25 @@ function processcmd(args)
 end
 
 
-# Main
-args = parse_cmdline()
-
-# Redirect logging to a file if necessary
-loglevel = args["debug"] ? Logging.Debug : Logging.Info
-if !isa(args["log"], Nothing)
-    io = open(args["log"], "w+")
-    logger = SimpleLogger(io, loglevel)
-    global_logger(logger)
-else
-    logger = ConsoleLogger(stderr, loglevel; show_limited=false)
-    global_logger(logger)
-end
-
-# Process commands
-processcmd(args)
-
-# Clean up
-if !isa(args["log"], Nothing)
-    flush(io)
-    close(io)
-end
+# # Main
+# args = parse_cmdline()
+#
+# # Redirect logging to a file if necessary
+# loglevel = args["debug"] ? Logging.Debug : Logging.Info
+# if !isa(args["log"], Nothing)
+#     io = open(args["log"], "w+")
+#     logger = SimpleLogger(io, loglevel)
+#     global_logger(logger)
+# else
+#     logger = ConsoleLogger(stderr, loglevel; show_limited=false)
+#     global_logger(logger)
+# end
+#
+# # Process commands
+# processcmd(args)
+#
+# # Clean up
+# if !isa(args["log"], Nothing)
+#     flush(io)
+#     close(io)
+# end

@@ -23,11 +23,11 @@ function record!(c::Chains, what::Symbol, value::Float64)
 	# Get indices of the new record
 	ix = findfirst(isequal(what), names(c.df))
 
-	# Add fields that we haven't seen yet
-	if isa(ix, Nothing)
-		c.df[:,what] = NaN
-		ix = findfirst(isequal(what), names(c.df))
-	end
+    # Add fields that we haven't seen yet
+    if isa(ix, Nothing)
+        c.df[:,what] = NaN
+        ix = findfirst(isequal(what), names(c.df))
+    end
 
 	# Fill in the values
 	c.df[end,ix] = value
