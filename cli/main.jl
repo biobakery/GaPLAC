@@ -2,22 +2,9 @@ using Pkg
 Pkg.activate(normpath(joinpath(@__DIR__, "..")))
 Pkg.instantiate()
 
-using Plots
-using Logging
-using CSV
-using Printf
-using Distributions
-using Statistics
+using GPTool
 using ArgParse
 
-include("../src/gp.jl")
-include("../src/formula.jl")
-include("../src/chains.jl")
-include("../src/mcmc.jl")
-include("../src/mcmcgp.jl")
-include("../src/laplacegp.jl")
-include("../src/directgp.jl")
-include("../src/bf.jl")
 
 function parse_cmdline()
     s = ArgParseSettings()
@@ -172,146 +159,30 @@ function parse_cmdline()
     return parse_args(s)
 end
 
+include("cli_include.jl")
 
-function read_data(data)
-    df = DataFrame()
-    key = []
-    for file in split(data, ";")
-        # (#?[,~]?ID?:)?filename
-        m = match(r"^((?<tr>#?)(?<ct>[,~]?)(?<id>[A-Za-z0-9]*):)?(?<file>[^:]*)$", file)
 
-        # Break into parts
-        filename = m[:file]
-        tr = isa(m[:tr], Nothing) ? false : m[:tr] == "#"
-        delim = if isa(m[:ct], Nothing)
-            endswith(filename, "csv") ? ',' : '\t'
-        else
-            m[:ct] == "," ? ',' : '\t'
-        end
-        id = isa(m[:id], Nothing) ? "" : m[:id]
+# Main
+args = parse_cmdline()
 
-        # Read the data
-        file = filename == "stdin" ? stdin : string(filename)
-        tbl = CSV.read(file, transpose=tr, delim=delim)
-        @info @sprintf("Read %s %s%s (%d samples with %d features)",
-            delim=="," ? "CSV" : "TSV", file, tr ? " (transposed)" : "",
-            size(tbl,1), size(tbl,2))
-
-        if isempty(df)
-            if id == ""
-                # Pick the first field for which each value is unique
-                goodkeys = [length(unique(tbl[i])) == size(tbl,1) for i in 1:size(tbl,2)]
-                !any(goodkeys) && error(@sprintf("No suitable id field found for %s", file))
-                keyidx = findfirst(goodkeys)
-                @info @sprintf("Using %s for sample ids in %s", names(tbl)[keyidx], file)
-                key = tbl[:,keyidx]
-            elseif !(Symbol(id) in names(tbl))
-                error(@sprintf("%s is not a field in %s", id, file))
-            else
-                key = tbl[:,Symbol(id)]
-            end
-            df = tbl
-        else
-            if id == ""
-                # Pick the field which matches the sample IDs the best
-                n = zeros(size(tbl, 2))
-                for i in 1:size(tbl, 2)
-                    n[i] = sum([isa(findfirst(isequal(entry), key), Nothing) for entry in tbl[i]])
-                end
-                bestid = indmax(n)
-                id = names(tbl)[bestid]
-                key2 = tbl[:,bestid]
-            elseif !(Symbol(id) in names(tbl))
-                error(@sprintf("%s is not a field in %s", id, file))
-            else
-                key2 = tbl[:,Symbol(id)]
-            end
-
-            # Match samples
-            ix = [findfirst(isequal(k), key2) for k in key]
-            if any(i-> isa(i, Nothing), ix)
-                error(@sprintf("Not all samples mapped to data in %s", file))
-            end
-            tbl2 = tbl[ix,:]
-
-            # Merge fields
-            for i in 1:size(tbl2, 2)
-                if names(tbl)[i] != Symbol(id)
-                    df[!, names(tbl)[i]] = tbl2[:,i]
-                end
-            end
-        end
-    end
-
-    return df
+# Redirect logging to a file if necessary
+loglevel = args["debug"] ? Logging.Debug : Logging.Info
+if !isa(args["log"], Nothing)
+    io = open(args["log"], "w+")
+    logger = SimpleLogger(io, loglevel)
+    global_logger(logger)
+else
+    logger = ConsoleLogger(stderr, loglevel; show_limited=false)
+    global_logger(logger)
 end
 
-function read_atdata(args)
-    if !isa(args["atdata"], Nothing) && !isa(args["at"], Nothing)
-        error("--atdata and --at are mutually exclusive")
-    end
+# Process commands
+processcmd(args)
 
-    # --atdata has the same format as --data
-    !isa(args["atdata"], Nothing) && return read_data(args[:atdata])
-
-    # --at or --atdata must be specified
-    isa(args["at"], Nothing) && error("Expected --atdata or --at")
-
-    # Split into name=value pairs
-    df = DataFrame()
-    for nameexpr in split(args["at"], ";")
-        # name = value
-        m = match(r"^(?<name>[^=]+?) *(/(?<group>[^=]+))? *= *(?<expr>.*)$", nameexpr)
-        isa(m, Nothing) &&
-            error("Format for --at is ;-separated \'<name> = <expression>\'")
-
-        # Evaluate
-        name = Symbol(m[:name])
-        valuefun = genfun(Meta.parse(m[:expr]), names(df))
-        value = Base.invokelatest(valuefun, [df[:,i] for i in 1:size(df)[2]]...)
-
-        # What is it?
-        if isa(value, Number)
-            # Simple value - just assign
-            df[name] = value
-        elseif isa(value, Vector) || isa(value, UnitRange) || isa(value, StepRange) || isa(value, StepRangeLen)
-            # Vector - ensure size is correct and assign
-            value = collect(value)
-            if !isa(m[:group], Nothing)
-                isempty(df) && error("--at cannot have a grouped variable as the first variable")
-                groupfun = genfun(Meta.parse(m[:group]), names(df))
-                group = Base.invokelatest(groupfun, [df[i] for i in 1:size(df)[2]]...)
-                unq_group = unique(group)
-                if length(unq_group) == length(group)
-                    # Unique groups - expand
-                    df = repeat(df, inner=length(value))
-                    df[!,name] = repeat(value, outer=length(group))
-                else
-                    # Non-unique groups - fill in
-                    n = sum(group .== unq_group[1])
-                    values = repeat(value[1], inner=size(df)[1])
-                    n != length(value) && error("Values must have the same length as the groups")
-                    for ug in unq_group
-                        mask = group .== ug
-                        n != sum(mask) && error(@sprintf("Grouping variable %s has unequal group lengths", m[:group]))
-                        values[mask] = value
-                    end
-                    df[name] = values
-                end
-            elseif isempty(df) || length(value) == size(df, 1)
-                df[!, name] = value
-            else
-                error(@sprintf("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1]))
-            end
-        elseif isa(value, UnivariateDistribution)
-            # Distribution - draw random values
-            df[name] = rand.(repeat([value], inner=size(df)[1]))
-        else
-            error(@sprintf("Unknown value in --at for %s: %s", name, m[:expr]))
-        end
-    end
-
-    return df
+# Clean up
+if !isa(args["log"], Nothing)
+    flush(io)
+    close(io)
 end
 
 function filter_outliers(data, parsedgp, args)
