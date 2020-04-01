@@ -27,7 +27,7 @@ function record!(c::Chains, what::Symbol, value::Float64)
     if isa(ix, Nothing)
         # when the dataframe is totally empty, this adds a 1-row column w/NaN, is that intended?
         # otherwise the last line of this function throws an error when the DataFrame is empty
-        nrow(df) == 0 ? c.df[!, what] = [NaN] : c.df[!,what] .= NaN
+        nrow(c.df) == 0 ? c.df[!, what] = [NaN] : c.df[!,what] .= NaN
         ix = findfirst(isequal(what), names(c.df)) # since you added column, this could be `size(c.df, 2)` instead
     end
 
