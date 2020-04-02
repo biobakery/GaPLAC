@@ -16,8 +16,8 @@ using Random
     t = collect(-5.:0.1:5.)
     f, y = GPTool.samplegp(gp.gp, [], [], [], [], t, t)
     @test length(f) == length(y)
-    @test first(f) == 0.1393494648232693
-    @test first(y) == 0.14029547194060588
+    @test isapprox(first(f), 0.1393494648232693, atol=1e-5)
+    @test isapprox(first(y), 0.14029547194060588, atol=1e-5)
 
     gp = GPTool.parse_gp_formula("y*Reads/100 : Binomial(Reads) ~| Cat(Person) * SExp(Time) + Noise", ["Time", "y", "Reads", "Person"], [false, false, false, true])
     @test gp.xfun_params == [:Person, :Time]
