@@ -555,11 +555,11 @@ function cmd_predict_cont(args, parsedgp, data, atdata)
     μ_pred, σ2_pred, Q_pred, f_pred, σ2_pred =
         predict(parsedgp.gp, mcmc, x, y, z, x2, z2;
             quantiles=[0.025, 0.05, 0.1, 0.159, 0.5, 0.841, 0.9, 0.95, 0.975])
-    prediction = DataFrame(ymu=μ_pred, ystd=sqrt(σ2_pred),
+    prediction = DataFrame(ymu=μ_pred, ystd=sqrt.(σ2_pred),
         yQ025=Q_pred[:,1], yQ050=Q_pred[:,2], yQ100=Q_pred[:,3], yQ159=Q_pred[:,4],
         yQ500=Q_pred[:,5],
         yQ841=Q_pred[:,6], yQ900=Q_pred[:,7], yQ950=Q_pred[:,8], yQ975=Q_pred[:,9],
-        fmu=f_pred, fstd=sqrt(σ2_pred))
+        fmu=f_pred, fstd=sqrt.(σ2_pred))
 
     # Output the sampled values
     write_tabular(hcat(index, prediction), args["output"])
@@ -582,7 +582,7 @@ function cmd_sample_cont(args, parsedgp, data, atdata)
         mcmc = read_mcmc(args["mcmc"])
 
         # Pick a random set of hyperparameters from the MCMC chain
-        ϕ = unrecord(parsedgp.gp, mcmc, rand(DiscreteUniform(1, size(mcmc.df, 1))))
+        ϕ = unrecord(parsedgp.gp, mcmc, rand(DiscreteUniform(1, length(mcmc))))
     else
         # Use the parsed parameters
         ϕ = invlink(parsedgp.gp, vcat(parsedgp.θl, parsedgp.θc))

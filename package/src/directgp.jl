@@ -1,6 +1,7 @@
 
 using LinearAlgebra
 using Distributions
+using ForwardDiff
 
 struct DirectGP <: AbstractGP
 	# The covariance function
@@ -24,7 +25,7 @@ end
 
 function ∇θ(gp::DirectGP, ϕ)
 	θcd = θ(gp, [ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
-	return value.(θcd), partials.(θcd,1)
+	return ForwardDiff.value.(θcd), ForwardDiff.partials.(θcd,1)
 end
 
 function covariance_function!(C::Matrix, gp::DirectGP, θc, x)
@@ -52,7 +53,7 @@ function record!(gp::DirectGP, chains::Chains, ϕ)
 	θc = θ(gp, ϕ)
 
 	for i in eachindex(θc)
-		record!(chains, Symbol(θc_names[i]), θc[i])
+		record!(chains, Symbol(gp.θc_names[i]), θc[i])
 	end
 end
 
@@ -80,13 +81,28 @@ function unrecord(gp::DirectGP, chains::Chains, ix::Int)
 	return invlink(gp, θ_target)
 end
 
-function predict(gp::DirectGP, ϕ, x, y, z, x2; quantiles)
+function predict(gp::DirectGP, mcmc, x, y, z, x2, z2; quantiles)
 	# Transform parameters
-	θc = θ(gp, ϕ)
+	θc = θ(gp, unrecord(gp, mcmc, size(mcmc.df,1)))
 
-	# TODO
+	# Evaluate covariance matrices
+	xCx = zeros(size(x, 1), size(x, 1))
+	covariance_function!(xCx, gp, θc, x)
+	xCy = zeros(size(x2, 1), size(x, 1))
+	covariance_function!(xCy, gp, θc, x2, x)
+	yCy = zeros(size(x2, 1), size(x2, 1))
+	covariance_function!(yCy, gp, θc, x2)
 
-	return μ_pred, σ2_pred, Q_pred, μf, σ2f
+	# Conditional distribution
+	μf = (xCy * (xCx \ y))[:,1]
+	σ2f = diag(yCy) - diag(xCy * (xCx \ transpose(xCy)))
+	
+	Q = zeros(size(x2, 1), length(quantiles))
+	for i in 1:length(μf)
+		Q[i,:] = quantile.(Normal(μf[i], sqrt(σ2f[i])), quantiles)
+	end
+
+	return μf, σ2f, Q, μf, σ2f
 end
 
 function samplegp(gp::DirectGP, ϕ, x, y, z, x2, z2)
@@ -127,7 +143,7 @@ function logposterior(gp::DirectGP, ϕ, x, y, z)
 	ll = logpdf(MvNormal(zeros(size(x,1)), C), y)
 
 	# Log prior
-	lp = sum(logpdf.(θc_prior, θc) .+ log.(dθc_dϕc))
+	lp = sum(logpdf.(gp.θc_prior, θc) .+ log.(dθc_dϕc))
 
 	# Return log prior and log lik separately
 	return lp, ll
