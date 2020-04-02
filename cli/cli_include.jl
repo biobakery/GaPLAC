@@ -5,7 +5,6 @@ using Printf
 using Distributions
 using Statistics
 
-
 function read_data(data)
     df = DataFrame()
     key = []
@@ -33,7 +32,7 @@ function read_data(data)
         if isempty(df)
             if id == ""
                 # Pick the first field for which each value is unique
-                goodkeys = [length(unique(tbl[i])) == size(tbl,1) for i in 1:size(tbl,2)]
+                goodkeys = [length(unique(tbl[i])) == size(tbl)[1] for i in 1:size(tbl)[2]]
                 !any(goodkeys) && error(@sprintf("No suitable id field found for %s", file))
                 keyidx = findfirst(goodkeys)
                 @info @sprintf("Using %s for sample ids in %s", names(tbl)[keyidx], file)
@@ -47,8 +46,8 @@ function read_data(data)
         else
             if id == ""
                 # Pick the field which matches the sample IDs the best
-                n = zeros(size(tbl, 2))
-                for i in 1:size(tbl, 2)
+                n = zeros(size(tbl)[2])
+                for i in 1:size(tbl)[2]
                     n[i] = sum([isa(findfirst(isequal(entry), key), Nothing) for entry in tbl[i]])
                 end
                 bestid = indmax(n)
@@ -62,15 +61,15 @@ function read_data(data)
 
             # Match samples
             ix = [findfirst(isequal(k), key2) for k in key]
-            if any(i-> isa(i, Nothing), ix)
+            if any(isa.(ix, Nothing))
                 error(@sprintf("Not all samples mapped to data in %s", file))
             end
             tbl2 = tbl[ix,:]
 
             # Merge fields
-            for i in 1:size(tbl2, 2)
+            for i in 1:size(tbl2)[2]
                 if names(tbl)[i] != Symbol(id)
-                    df[!, names(tbl)[i]] = tbl2[:,i]
+                    df[names(tbl)[i]] = tbl2[:,i]
                 end
             end
         end
@@ -118,7 +117,7 @@ function read_atdata(args)
                 if length(unq_group) == length(group)
                     # Unique groups - expand
                     df = repeat(df, inner=length(value))
-                    df[!,name] = repeat(value, outer=length(group))
+                    df[name] = repeat(value, outer=length(group))
                 else
                     # Non-unique groups - fill in
                     n = sum(group .== unq_group[1])
@@ -131,8 +130,8 @@ function read_atdata(args)
                     end
                     df[name] = values
                 end
-            elseif isempty(df) || length(value) == size(df, 1)
-                df[!, name] = value
+            elseif isempty(df) || length(value) == size(df)[1]
+                df[name] = value
             else
                 error(@sprintf("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1]))
             end
@@ -263,7 +262,7 @@ function gen_gp_inputs(parsedgp, data, atdata)
     # Get target data matrices
     x2, z2 = GPTool.gp_inputs(parsedgp, atdata)
     vars = union(parsedgp.xfun_params, parsedgp.zfun_params)
-    index = atdata[:,[(name in vars) for name in names(atdata)]] # returns a copy
+    index = atdata[[(name in vars) for name in names(atdata)]]
 
     return x, y, z, x2, z2, index
 end
@@ -302,12 +301,12 @@ function make_sampleplot(args, data, y, parsedgp)
     else
         m = match(r"^(?<time>.*?) *(: *(?<group>.*))?$", args["plotx"])
         !(string(m[:time]) in string.(names(data))) && error("X dimension of plot is not a variable given to --at or --atdata")
-        time = data[!,Symbol(m[:time])]
+        time = data[Symbol(m[:time])]
         group = if isa(m[:group], Nothing)
             zeros(length(time))
         else
             !(string(m[:group]) in string.(names(data))) && error("Grouping variable for plot is not a variable given to --at or --atdata")
-            data[!, Symbol(m[:group])]
+            data[Symbol(m[:group])]
         end
         xlab = string(m[:time])
     end
@@ -391,11 +390,11 @@ function cmd_predict_cont(args, parsedgp, data, atdata)
     μ_pred, σ2_pred, Q_pred, f_pred, σ2_pred =
         predict(parsedgp.gp, mcmc, x, y, z, x2, z2;
             quantiles=[0.025, 0.05, 0.1, 0.159, 0.5, 0.841, 0.9, 0.95, 0.975])
-    prediction = DataFrame(ymu=μ_pred, ystd=sqrt(σ2_pred),
+    prediction = DataFrame(ymu=μ_pred, ystd=sqrt.(σ2_pred),
         yQ025=Q_pred[:,1], yQ050=Q_pred[:,2], yQ100=Q_pred[:,3], yQ159=Q_pred[:,4],
         yQ500=Q_pred[:,5],
         yQ841=Q_pred[:,6], yQ900=Q_pred[:,7], yQ950=Q_pred[:,8], yQ975=Q_pred[:,9],
-        fmu=f_pred, fstd=sqrt(σ2_pred))
+        fmu=f_pred, fstd=sqrt.(σ2_pred))
 
     # Output the sampled values
     write_tabular(hcat(index, prediction), args["output"])
@@ -418,7 +417,7 @@ function cmd_sample_cont(args, parsedgp, data, atdata)
         mcmc = read_mcmc(args["mcmc"])
 
         # Pick a random set of hyperparameters from the MCMC chain
-        ϕ = unrecord(parsedgp.gp, mcmc, rand(DiscreteUniform(1, size(mcmc.df, 1))))
+        ϕ = unrecord(parsedgp.gp, mcmc, rand(DiscreteUniform(1, length(mcmc))))
     else
         # Use the parsed parameters
         ϕ = GPTool.invlink(parsedgp.gp, vcat(parsedgp.θl, parsedgp.θc))
