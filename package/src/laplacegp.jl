@@ -250,9 +250,9 @@ function predict(gp::LaplaceGP, mcmc, x, y, z, x2, z2; quantiles=[], detail=15)
 	μ_pred = zeros(size(x2, 1))
 	σ2_pred = zeros(size(x2, 1))
 	Q_pred = zeros(size(x2, 1), length(quantiles))
-	σf = sqrt.(σ2f)
+	σf = sqrt.(σ2f2)
 	for i in 1:length(μf2)
-		pred_nodes = [gp.datalik(μf[i] + nx * σf[i], z[i,:], θl) for nx in ghq_nodes]
+		pred_nodes = [gp.datalik(μf2[i] + nx * σf[i], z[i,:], θl) for nx in ghq_nodes]
 
 		# Calculate mean
 		μ_node = mean.(pred_nodes)
