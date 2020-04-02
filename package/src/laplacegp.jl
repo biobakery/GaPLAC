@@ -5,39 +5,39 @@ using Distributions
 using FastGaussQuadrature
 
 struct LaplaceGP <: AbstractGP
-    # The covariance function
+	# The covariance function
 	# Signature: (x_i::Vector, x_j::Vector, self::Boolean, θc::Vector) -> Real
-    cf::Function # Covariance function used for prediction
+	cf::Function # Covariance function used for prediction
 	cftr::Function # Covariance function used for training
 	# Covariance function hyperparameter transformation
-    θc_link::Function
-    # Prior on covariance function hyperparameters
-    θc_prior::Vector{UnivariateDistribution}
+	θc_link::Function
+	# Prior on covariance function hyperparameters
+	θc_prior::Vector{UnivariateDistribution}
 	# Covariance function hyperparameter names
 	θc_names::Vector{String}
-    # Jitter
-    jitter::Float64
+	# Jitter
+	jitter::Float64
 
-    # Data Likelihood
+	# Data Likelihood
 	# Signature: (f_i::Float64, z_i::Vector, θl::Vector) -> UnivariateDistribution
 	datalik::Function
-    # Data likelihood hyperparameter transformation
-    θl_link::Function
-    # Prior on data likelihood hyperparameters
-    θl_prior::Vector{UnivariateDistribution}
+	# Data likelihood hyperparameter transformation
+	θl_link::Function
+	# Prior on data likelihood hyperparameters
+	θl_prior::Vector{UnivariateDistribution}
 	# Data likelihood hyperparameter names
 	θl_names::Vector{String}
 end
 
 
 function θ(gp::LaplaceGP, ϕ)
-    return gp.θl_link(ϕ[1:length(gp.θl_prior)]),
-        gp.θc_link(ϕ[length(gp.θl_prior) .+ (1:length(gp.θc_prior))])
+	return gp.θl_link(ϕ[1:length(gp.θl_prior)]),
+		gp.θc_link(ϕ[length(gp.θl_prior) .+ (1:length(gp.θc_prior))])
 end
 
 function ∇θ(gp::LaplaceGP, ϕ)
 	θld, θcd = θ(gp, [ForwardDiff.Dual(ϕi, 1.) for ϕi in ϕ])
-    return ForwardDiff.value.(θld), ForwardDiff.value.(θcd),
+	return ForwardDiff.value.(θld), ForwardDiff.value.(θcd),
 		ForwardDiff.partials.(θld,1), ForwardDiff.partials.(θcd,1)
 end
 
@@ -119,7 +119,7 @@ function laplace_approx(gp::LaplaceGP, L::LowerTriangular, y, z, θl;
 		Evals = E.values
 		Evecs = E.vectors
 		@debug "Eigs", Evals
-        if !all(isreal.(Evals))
+		if !all(isreal.(Evals))
 			# Sometimes, floating point accuracy makes the matrix slightly
 			# assymetric, leading to imaginary eigenvalues. Discard them here.
 			Evals = real.(Evals)
@@ -159,7 +159,7 @@ end
 
 function record!(gp::LaplaceGP, chains::Chains, ϕ)
 	# Separate and transform parameters
-    θl, θc = θ(gp, ϕ)
+	θl, θc = θ(gp, ϕ)
 
 	for i in eachindex(θl)
 		record!(chains, Symbol(gp.θl_names[i]), θl[i])
@@ -199,8 +199,8 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 	# Conditional latent distribution at the target x2
 
 	# Evaluate the covariance function at θ
-    xCx = zeros(size(x, 1), size(x, 1))
-    covariance_function!(xCx, gp, θc, x)
+	xCx = zeros(size(x, 1), size(x, 1))
+	covariance_function!(xCx, gp, θc, x)
 
 	# Factorize
 	L = cholesky(xCx, Val(false)).L
@@ -212,10 +212,10 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 
 	# Evaluate covariance between training and test points
 	xCy = zeros(size(x2, 1), size(x, 1))
-    covariance_function!(xCy, gp, θc, x2, x)
+	covariance_function!(xCy, gp, θc, x2, x)
 	@debug "xCy" xCy
 	yCy = zeros(size(x2, 1), size(x2, 1))
-    covariance_function!(yCy, gp, θc, x2)
+	covariance_function!(yCy, gp, θc, x2)
 
 	# Get the predicted distribution for the test point latents
 	∇ll_f = zeros(length(y))
@@ -236,19 +236,11 @@ function cond_latents(gp::LaplaceGP, θl, θc, x, y, z, x2)
 end
 
 function predict(gp::LaplaceGP, mcmc, x, y, z, x2, z2; quantiles=[], detail=15)
-
 	# Get quadrature nodes and weights
 	ghq_nodes, ghq_weights = gausshermite(detail)
 
-	# Replicate a random datalik as a starting point for predicted distributions
-	θl_1, θc_1 = θ(gp, unrecord(mcmc, 1))
-	repeat([gp.datalik(0., z2[1,:], θl_1)], size(x2, 1), size(mcmc.df,1))
-
-	# TODO here
-
-
 	# Separate and transform parameters
-    θl, θc = θ(gp, ϕ)
+	θl, θc = θ(gp, unrecord(gp, mcmc, size(mcmc.df,1)))
 
 	# Get the latent distribution at the target points given the
 	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
@@ -313,7 +305,7 @@ end
 
 function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
 	# Separate and transform parameters
-    θl, θc = θ(gp, ϕ)
+	θl, θc = θ(gp, ϕ)
 
 	# Get the latent distribution at the target points given the
 	μf2, Σf2 = cond_latents(gp, θl, θc, x, y, z, x2)
@@ -332,15 +324,15 @@ function samplegp(gp::LaplaceGP, ϕ, x, y, z, x2, z2)
 end
 
 function logposterior(gp::LaplaceGP, ϕ, x, y, z)
-    # Separate and transform parameters
-    θl, θc, dθl_dϕl, dθc_dϕc = ∇θ(gp, ϕ)
+	# Separate and transform parameters
+	θl, θc, dθl_dϕl, dθc_dϕc = ∇θ(gp, ϕ)
 
-    # Evaluate the covariance function at θ
-    C = zeros(size(x, 1), size(x, 1))
-    covariance_function!(C, gp, θc, x)
+	# Evaluate the covariance function at θ
+	C = zeros(size(x, 1), size(x, 1))
+	covariance_function!(C, gp, θc, x)
 
-    # Factorize
-    L = cholesky(C, Val(false)).L
+	# Factorize
+	L = cholesky(C, Val(false)).L
 
 	# Laplace approximation of the latent posterior
 	fw, ∇2ll_fw, ll = laplace_approx(gp, L, y, z, θl)
@@ -359,10 +351,10 @@ function logposterior(gp::LaplaceGP, ϕ, x, y, z)
 	# Marginalize over the Laplace approximation of the latent posterior
 	ll += (log(2*π) + ldetΣ) / 2
 
-    # Log prior
-    lp = sum(logpdf.(gp.θl_prior, θl) .+ log.(dθl_dϕl)) +
+	# Log prior
+	lp = sum(logpdf.(gp.θl_prior, θl) .+ log.(dθl_dϕl)) +
 	     sum(logpdf.(gp.θc_prior, θc) .+ log.(dθc_dϕc))
 
-    # Return log prior and log lik separately
-    return lp, ll
+	# Return log prior and log lik separately
+	return lp, ll
 end

@@ -4,17 +4,17 @@ end
 
 mutable struct MCMCStats
 	# Total time taken by the sampler
-    total_time_s::Float64
+	total_time_s::Float64
 	# Accepted samples
 	accepts::Int
 	# Rejected samples
-    rejects::Int
+	rejects::Int
 	# Total function evaluations
-    evaluations::Int
+	evaluations::Int
 	# Total gradient function evaluations
-    grad_evaluations::Int
+	grad_evaluations::Int
 
-    MCMCStats() = new(0.0, 0, 0, 0, 0)
+	MCMCStats() = new(0.0, 0, 0, 0, 0)
 end
 
 struct UnivariateSliceMCMC <: AbstractMCMC
