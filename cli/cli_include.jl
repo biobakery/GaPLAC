@@ -4,6 +4,7 @@ using CSV
 using Printf
 using Distributions
 using Statistics
+using DataFrames
 
 function read_data(data)
     df = DataFrame()
@@ -203,7 +204,7 @@ end
 
 function read_mcmc(filename)
     file = filename == "stdin" ? stdin : filename
-    chain = read_chains(file)
+    chain = GPTool.read_chains(file)
 
     @info @sprintf("Read %d MCMC samples from %s", size(chain.df,1), filename)
     return chain
@@ -388,7 +389,7 @@ function cmd_predict_cont(args, parsedgp, data, atdata)
 
     # Perform the prediction
     μ_pred, σ2_pred, Q_pred, f_pred, σ2_pred =
-        predict(parsedgp.gp, mcmc, x, y, z, x2, z2;
+        GPTool.predict(parsedgp.gp, mcmc, x, y, z, x2, z2;
             quantiles=[0.025, 0.05, 0.1, 0.159, 0.5, 0.841, 0.9, 0.95, 0.975])
     prediction = DataFrame(ymu=μ_pred, ystd=sqrt.(σ2_pred),
         yQ025=Q_pred[:,1], yQ050=Q_pred[:,2], yQ100=Q_pred[:,3], yQ159=Q_pred[:,4],
