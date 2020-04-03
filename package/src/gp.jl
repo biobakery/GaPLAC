@@ -1,3 +1,2 @@
 
-abstract type AbstractGP
-end
+abstract type AbstractGP end

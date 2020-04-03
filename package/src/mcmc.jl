@@ -1,6 +1,5 @@
 
-abstract type AbstractMCMC
-end
+abstract type AbstractMCMC end
 
 mutable struct MCMCStats
 	# Total time taken by the sampler

@@ -197,7 +197,7 @@ function read_data(data)
         if isempty(df)
             if id == ""
                 # Pick the first field for which each value is unique
-                goodkeys = [length(unique(tbl[i])) == size(tbl)[1] for i in 1:size(tbl)[2]]
+                goodkeys = [length(unique(tbl[i])) == size(tbl,1) for i in 1:size(tbl,2)]
                 !any(goodkeys) && error(@sprintf("No suitable id field found for %s", file))
                 keyidx = findfirst(goodkeys)
                 @info @sprintf("Using %s for sample ids in %s", names(tbl)[keyidx], file)
@@ -211,8 +211,8 @@ function read_data(data)
         else
             if id == ""
                 # Pick the field which matches the sample IDs the best
-                n = zeros(size(tbl)[2])
-                for i in 1:size(tbl)[2]
+                n = zeros(size(tbl, 2))
+                for i in 1:size(tbl, 2)
                     n[i] = sum([isa(findfirst(isequal(entry), key), Nothing) for entry in tbl[i]])
                 end
                 bestid = indmax(n)
@@ -226,15 +226,15 @@ function read_data(data)
 
             # Match samples
             ix = [findfirst(isequal(k), key2) for k in key]
-            if any(isa.(ix, Nothing))
+            if any(i-> isa(i, Nothing), ix)
                 error(@sprintf("Not all samples mapped to data in %s", file))
             end
             tbl2 = tbl[ix,:]
 
             # Merge fields
-            for i in 1:size(tbl2)[2]
+            for i in 1:size(tbl2, 2)
                 if names(tbl)[i] != Symbol(id)
-                    df[names(tbl)[i]] = tbl2[:,i]
+                    df[!, names(tbl)[i]] = tbl2[:,i]
                 end
             end
         end
@@ -282,7 +282,7 @@ function read_atdata(args)
                 if length(unq_group) == length(group)
                     # Unique groups - expand
                     df = repeat(df, inner=length(value))
-                    df[name] = repeat(value, outer=length(group))
+                    df[!,name] = repeat(value, outer=length(group))
                 else
                     # Non-unique groups - fill in
                     n = sum(group .== unq_group[1])
@@ -295,8 +295,8 @@ function read_atdata(args)
                     end
                     df[name] = values
                 end
-            elseif isempty(df) || length(value) == size(df)[1]
-                df[name] = value
+            elseif isempty(df) || length(value) == size(df, 1)
+                df[!, name] = value
             else
                 error(@sprintf("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1]))
             end
@@ -427,7 +427,7 @@ function gen_gp_inputs(parsedgp, data, atdata)
     # Get target data matrices
     x2, z2 = gp_inputs(parsedgp, atdata)
     vars = union(parsedgp.xfun_params, parsedgp.zfun_params)
-    index = atdata[[(name in vars) for name in names(atdata)]]
+    index = atdata[:,[(name in vars) for name in names(atdata)]] # returns a copy
 
     return x, y, z, x2, z2, index
 end
@@ -466,12 +466,12 @@ function make_sampleplot(args, data, y, parsedgp)
     else
         m = match(r"^(?<time>.*?) *(: *(?<group>.*))?$", args["plotx"])
         !(string(m[:time]) in string.(names(data))) && error("X dimension of plot is not a variable given to --at or --atdata")
-        time = data[Symbol(m[:time])]
+        time = data[!,Symbol(m[:time])]
         group = if isa(m[:group], Nothing)
             zeros(length(time))
         else
             !(string(m[:group]) in string.(names(data))) && error("Grouping variable for plot is not a variable given to --at or --atdata")
-            data[Symbol(m[:group])]
+            data[!, Symbol(m[:group])]
         end
         xlab = string(m[:time])
     end
@@ -663,24 +663,26 @@ end
 
 
 # Main
-args = parse_cmdline()
+if !Base.isinteractive()
+    args = parse_cmdline()
 
-# Redirect logging to a file if necessary
-loglevel = args["debug"] ? Logging.Debug : Logging.Info
-if !isa(args["log"], Nothing)
-    io = open(args["log"], "w+")
-    logger = SimpleLogger(io, loglevel)
-    global_logger(logger)
-else
-    logger = ConsoleLogger(stderr, loglevel; show_limited=false)
-    global_logger(logger)
-end
+    # Redirect logging to a file if necessary
+    loglevel = args["debug"] ? Logging.Debug : Logging.Info
+    if !isa(args["log"], Nothing)
+        io = open(args["log"], "w+")
+        logger = SimpleLogger(io, loglevel)
+        global_logger(logger)
+    else
+        logger = ConsoleLogger(stderr, loglevel; show_limited=false)
+        global_logger(logger)
+    end
 
-# Process commands
-processcmd(args)
+    # Process commands
+    processcmd(args)
 
-# Clean up
-if !isa(args["log"], Nothing)
-    flush(io)
-    close(io)
+    # Clean up
+    if !isa(args["log"], Nothing)
+        flush(io)
+        close(io)
+    end
 end
