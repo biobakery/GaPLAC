@@ -8,6 +8,9 @@ using Printf
 using Distributions
 using Statistics
 using ArgParse
+using LinearAlgebra
+using ForwardDiff
+using FastGaussQuadrature
 
 include("chains.jl")
 include("gp.jl")

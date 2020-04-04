@@ -6,10 +6,6 @@
 # TODO: Errors from these functions could provide better context so that
 # finding the actual problem in the formula is easier
 
-using DataFrames
-using Distributions
-using Printf
-
 struct Delta{T<:Real} <: ContinuousUnivariateDistribution
     # The single value of the distribution
     value::T
@@ -83,7 +79,7 @@ struct Parameter
 end
 
 param_positive(p) = :(exp($p))
-param_real(p) = :($p)
+param_real(p) = :($p) #?
 
 struct Likelihood
     z_inputs::Int
@@ -96,7 +92,7 @@ end
 #  z[k], likelihood input k
 #  $param, likelihood parameter
 
-data_likelihoods = Dict(
+const data_likelihoods = Dict(
     "None" => Likelihood(0, [], () -> :(Normal(f, 1e-6))),
     "Gaussian" => Likelihood(
         0, # number of fields in z
@@ -150,7 +146,9 @@ end
 #  $param, covariance function parameter
 # Signature: (xi..., xj..., params...) -> Expr
 
-covariance_functions = Dict(
+# making these constants does not prevent adding or changing keys
+# it just means it won't get reassigned to something else
+const covariance_functions = Dict(
     "Constant" => CovarianceFunction(
         0, true,
         [Parameter("σ2", "Variance", 1, Gamma(2, 0.5), param_positive)],

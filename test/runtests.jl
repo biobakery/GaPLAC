@@ -8,6 +8,10 @@ for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
     isfile(f) && rm(f)
 end
 
+@testset "Forumla" begin
+    
+end
+
 @testset "API" begin
     Random.seed!(42)
 
@@ -31,13 +35,13 @@ end
 end
 
 
-@testset "Old Tests" begin
-    include("oldtests.jl")
-    for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
-        @test isfile(f)
-        rm(f)
-    end
-
-    dif = run(`diff out.tsv testout/seed1_out.tsv`) |> read |> String
-    @test dif == ""
-end
+# @testset "Old Tests" begin
+#     include("oldtests.jl")
+#     for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
+#         @test isfile(f)
+#         rm(f)
+#     end
+#
+#     dif = run(`diff out.tsv testout/seed1_out.tsv`) |> read |> String
+#     @test dif == ""
+# end
