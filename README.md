@@ -1,6 +1,10 @@
 
 # Guide
 
+[![Build Status](https://github.com/kescobo/gptool.jl/workflows/CI/badge.svg)](https://github.com/kescobo/gptool.jl/actions)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://kescobo.github.io/gptool.jl/stable)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://kescobo.github.io/gptool.jl/dev)
+
 This guide is intended to provide an overview of the basic workflow using GaPLAC. A complete command reference, as well as available covariance and likelihood functions are provided below.
 
 ## Installation
