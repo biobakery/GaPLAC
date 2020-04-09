@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = gptool
+CurrentModule = GPTool
 ```
 
-# gptool
+# GPTool
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [gptool]
+Modules = [GPTool]
 ```
