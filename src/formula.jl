@@ -696,6 +696,7 @@ function chompw(s)
     return i > 1 ? s[i:end] : s
 end
 
+# could use `split(s, !isletter)` ?
 function chomp_name(s)
     # Chomp a name
     i = 1

@@ -2,9 +2,6 @@
 abstract type AbstractChains
 end
 
-
-using DataFrames
-
 mutable struct Chains <: AbstractChains
 	# Main dataframe
 	df::DataFrame
@@ -13,7 +10,7 @@ mutable struct Chains <: AbstractChains
 	Chains(d::DataFrame) = new(d)
 end
 
-
+# Maybe overload Base.getindex()?
 function getrecords(c::Chains, what)
     # Get data for a sample
     c.df[!, what] # this returns a view, not a copy. Can use `c.df[:, what]` to get copy
@@ -37,12 +34,13 @@ end
 
 function thin(c::Chains, burnin::Integer, thinning::Integer)
 	# Chain thinning
+	# Does it matter that this thinnning isn't random?
 	Chains(c.df[(burnin+1):thinning:end, :])
 end
 
 function newsample!(c::Chains)
 	# Begin a new sample
-	push!(c.df, repeat([NaN], size(c.df)[2]))
+	push!(c.df, repeat([NaN], size(c.df,2)))
 end
 
 # IO

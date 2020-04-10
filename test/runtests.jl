@@ -8,9 +8,57 @@ for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
     isfile(f) && rm(f)
 end
 
-@testset "Forumla" begin
-    
+@testset "BF" begin
 end
+
+@testset "Chains" begin
+    chains1 = GPTool.Chains()
+    @test GPTool.record!(chains1, :a, 1.) == 1
+    @test size(chains1.df) == (1,1)
+    @test chains1.df.a == [1.]
+    
+    df = DataFrame(a=rand(10))
+    chains2 = GPTool.Chains(df)
+    @test GPTool.getrecords(chains2, :a) == df.a
+
+    @test GPTool.record!(chains2, :a, 1.) == 1.
+    @test chains2.df.a[10] == 1.
+    @test GPTool.record!(chains2, :b, 1.) == 1.
+    @test chains2.df.b[10] == 1.
+    @test all(isnan, chains2.df.b[1:9])
+
+    @test size(GPTool.thin(chains2, 3, 2).df) == (4,2)
+
+end
+
+
+@testset "Direct GP" begin
+end
+
+
+@testset "Forumla" begin
+end
+
+
+@testset "GP" begin
+end
+
+
+@testset "Laplace GP" begin
+end
+
+
+@testset "MCMC" begin
+end
+
+
+@testset "MCMC GP" begin
+end
+
+
+@testset "Vis" begin
+end
+
 
 @testset "API" begin
     Random.seed!(42)
