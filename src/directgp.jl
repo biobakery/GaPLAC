@@ -1,8 +1,3 @@
-
-using LinearAlgebra
-using Distributions
-using ForwardDiff
-
 struct DirectGP <: AbstractGP
 	# The covariance function
 	# Signature: (x_i::Vector, x_j::Vector, self::Boolean, θc::Vector) -> Real

@@ -14,7 +14,7 @@ end
 @testset "Chains" begin
     chains1 = GPTool.Chains()
     @test GPTool.record!(chains1, :a, 1.) == 1
-    @test size(chains1.df) == (1,1)
+    @test size(chains1) == (1,1)
     @test chains1.df.a == [1.]
     
     df = DataFrame(a=rand(10))
@@ -27,7 +27,12 @@ end
     @test chains2.df.b[10] == 1.
     @test all(isnan, chains2.df.b[1:9])
 
-    @test size(GPTool.thin(chains2, 3, 2).df) == (4,2)
+    @test size(GPTool.thin(chains2, 3, 2)) == (4,2)
+
+    GPTool.newsample!(chains2)
+    @test size(chains2) == (11,2)
+
+    # TODO: add tests for read/write chains
 
 end
 
@@ -37,6 +42,12 @@ end
 
 
 @testset "Forumla" begin
+    gp = GPTool.parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])
+    @test gp isa GPTool.ParsedGPFormula
+    @test length(gp.xnames) == 1
+    @test gp.xnames[1] == "t"
+
+
 end
 
 
@@ -68,18 +79,19 @@ end
     @test length(gp.xnames) == 1
     @test gp.xnames[1] == "t"
     # what else ??
-
+    
     t = collect(-5.:0.1:5.)
     f, y = GPTool.samplegp(gp.gp, [], [], [], [], t, t)
     @test length(f) == length(y)
-
+    
     # # need better tests since random generation is not considered stable accross julia versions
     # @test isapprox(first(f), 0.1393494648232693, atol=1e-5)
     # @test isapprox(first(y), 0.14029547194060588, atol=1e-5)
-
+    
     gp = GPTool.parse_gp_formula("y*Reads/100 : Binomial(Reads) ~| Cat(Person) * SExp(Time) + Noise", ["Time", "y", "Reads", "Person"], [false, false, false, true])
     @test gp.xfun_params == [:Person, :Time]
     @test gp.θc == [0.1,1.,1.]
+    
 end
 
 

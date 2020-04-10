@@ -10,6 +10,8 @@ mutable struct Chains <: AbstractChains
 	Chains(d::DataFrame) = new(d)
 end
 
+Base.size(c::Chains) = size(c.df)
+
 # Maybe overload Base.getindex()?
 function getrecords(c::Chains, what)
     # Get data for a sample
