@@ -4,9 +4,6 @@ using GPTool.CSV
 using Test
 using Random
 
-for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
-    isfile(f) && rm(f)
-end
 
 @testset "BF" begin
 end
@@ -42,6 +39,16 @@ end
 
 
 @testset "Forumla" begin
+    @test GPTool.sanitize_var_name("this is a test") == "this_is_a_test"
+    @test GPTool.sanitize_var_name("this.is.a.test") == "this_is_a_test"
+    @test GPTool.sanitize_var_name("σ") == "_"
+    @test GPTool.sanitize_var_name("1234") == "X1234"
+    @test GPTool.sanitize_var_name("_1234") == "_1234"
+
+    (vn, vs) = GPTool.get_varset(["this is a test", "this.is.a.test", "σ", "1234", "_1234"])
+    @test vn == ["this_is_a_test", "this_is_a_test", "_", "X1234", "_1234"]
+    @test vs == Set([:this_is_a_test, :_, :X1234, :_1234])
+    
     gp = GPTool.parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])
     @test gp isa GPTool.ParsedGPFormula
     @test length(gp.xnames) == 1
@@ -72,6 +79,11 @@ end
 
 
 @testset "API" begin
+    
+    for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
+        isfile(f) && rm(f)
+    end
+
     Random.seed!(42)
 
     gp = GPTool.parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])

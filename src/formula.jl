@@ -247,6 +247,14 @@ function sanitize_var_name(name)
     return replace(name, r"[^A-Za-z0-9_]" => "_")
 end
 
+function get_varset(vars::Array{String})
+    sanitized = [sanitize_var_name(string(name)) for name in vars]
+    vnset = Set(Symbol.(sanitized))
+    sanitized, vnset
+end
+
+
+
 function parse_gp_formula(formula::String, var_names::Array{String},
     var_cat::Array{Bool}; def_lik::String = "Gaussian")
     # Main entrypoint for parsing a GP formula
@@ -259,11 +267,10 @@ function parse_gp_formula(formula::String, var_names::Array{String},
     end
 
     # Get potential variable names
-    # TODO: Move this outside of this function so that var names are universal
-    variablenames = [sanitize_var_name(string(name)) for name in var_names]
-    varname_set = Set(Symbol.(variablenames))
+    variablenames, varname_set = get_varset(var_names)
 
     # Evaluate y
+
     yfun = identity
     yvars = []
     yex = :()
@@ -272,6 +279,7 @@ function parse_gp_formula(formula::String, var_names::Array{String},
         yvars = [getvariables(yex, varname_set)...]
         yfun = genfun(yex, yvars)
     catch err
+        # it would be better to throw errors directly from functions above
         error(@sprintf("Error in Y formula: %s", string(err)))
     end
 
