@@ -48,6 +48,8 @@ end
     (vn, vs) = GPTool.get_varset(["this is a test", "this.is.a.test", "σ", "1234", "_1234"])
     @test vn == ["this_is_a_test", "this_is_a_test", "_", "X1234", "_1234"]
     @test vs == Set([:this_is_a_test, :_, :X1234, :_1234])
+
+
     
     gp = GPTool.parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])
     @test gp isa GPTool.ParsedGPFormula
@@ -107,13 +109,14 @@ end
 end
 
 
-# @testset "Old Tests" begin
-#     include("oldtests.jl")
-#     for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
-#         @test isfile(f)
-#         rm(f)
-#     end
-#
-#     dif = run(`diff out.tsv testout/seed1_out.tsv`) |> read |> String
-#     @test dif == ""
-# end
+@testset "Old Tests" begin
+    include("oldtests.jl")
+
+    dif = run(`diff out.tsv testout/seed1_out.tsv`) |> read |> String
+    @test dif == ""
+    
+    for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
+        @test isfile(f)
+        rm(f)
+    end
+end
