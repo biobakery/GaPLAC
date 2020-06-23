@@ -1,9 +1,4 @@
 
-using LinearAlgebra
-using ForwardDiff
-using Distributions
-using FastGaussQuadrature
-
 struct LaplaceGP <: AbstractGP
 	# The covariance function
 	# Signature: (x_i::Vector, x_j::Vector, self::Boolean, θc::Vector) -> Real

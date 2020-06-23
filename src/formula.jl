@@ -6,10 +6,6 @@
 # TODO: Errors from these functions could provide better context so that
 # finding the actual problem in the formula is easier
 
-using DataFrames
-using Distributions
-using Printf
-
 struct Delta{T<:Real} <: ContinuousUnivariateDistribution
     # The single value of the distribution
     value::T
@@ -83,7 +79,7 @@ struct Parameter
 end
 
 param_positive(p) = :(exp($p))
-param_real(p) = :($p)
+param_real(p) = :($p) #?
 
 struct Likelihood
     z_inputs::Int
@@ -96,7 +92,7 @@ end
 #  z[k], likelihood input k
 #  $param, likelihood parameter
 
-data_likelihoods = Dict(
+const data_likelihoods = Dict(
     "None" => Likelihood(0, [], () -> :(Normal(f, 1e-6))),
     "Gaussian" => Likelihood(
         0, # number of fields in z
@@ -150,7 +146,9 @@ end
 #  $param, covariance function parameter
 # Signature: (xi..., xj..., params...) -> Expr
 
-covariance_functions = Dict(
+# making these constants does not prevent adding or changing keys
+# it just means it won't get reassigned to something else
+const covariance_functions = Dict(
     "Constant" => CovarianceFunction(
         0, true,
         [Parameter("σ2", "Variance", 1, Gamma(2, 0.5), param_positive)],
@@ -249,23 +247,13 @@ function sanitize_var_name(name)
     return replace(name, r"[^A-Za-z0-9_]" => "_")
 end
 
-function parse_gp_formula(formula::String, var_names::Array{String},
-    var_cat::Array{Bool}; def_lik::String = "Gaussian")
-    # Main entrypoint for parsing a GP formula
-    # Uses a simple hand-rolled recursive descent parser
+function get_varset(vars::Array{String})
+    sanitized = [sanitize_var_name(string(name)) for name in vars]
+    vnset = Set(Symbol.(sanitized))
+    sanitized, vnset
+end
 
-    # Not as good as a real parser, but works for our purposes
-    hasmatch, yformula, final, s = match_until_wnested(formula, Set([':', '~']))
-    if !hasmatch
-        error("Expected formula for y")
-    end
-
-    # Get potential variable names
-    # TODO: Move this outside of this function so that var names are universal
-    variablenames = [sanitize_var_name(string(name)) for name in var_names]
-    varname_set = Set(Symbol.(variablenames))
-
-    # Evaluate y
+function  evaluate_y(yformula, varname_set)
     yfun = identity
     yvars = []
     yex = :()
@@ -274,17 +262,20 @@ function parse_gp_formula(formula::String, var_names::Array{String},
         yvars = [getvariables(yex, varname_set)...]
         yfun = genfun(yex, yvars)
     catch err
+        # it would be better to throw errors directly from functions above
         error(@sprintf("Error in Y formula: %s", string(err)))
     end
+    yfun, yvars, yex
+end
 
-    # Parse the likelihood (optional)
-    zalloc = VarAllocator(variablenames, var_cat)
+function parse_lik_from_formula(formula_chunk, final, def_lik, zalloc)
     directgp = false
+
     if final == ':'
-        s = chompw(s)
-        if s[1] != '~'
-            lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, s = parse_lik(s, zalloc)
-            s = chompw(s)
+        formula_chunk = chompw(formula_chunk)
+        if formula_chunk[1] != '~'
+            lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, formula_chunk = parse_lik(formula_chunk, zalloc)
+            formula_chunk = chompw(formula_chunk)
         else
             directgp = true
             lik_ex = :f
@@ -292,43 +283,37 @@ function parse_gp_formula(formula::String, var_names::Array{String},
             θl, θl_prior = [], []
             θl_link_ex, θl_names = [], []
         end
-        if isempty(s) || s[1] != '~'
+        if isempty(formula_chunk) || formula_chunk[1] != '~'
             error("Expected ~ after data likelihood.")
         end
-        s = s[2:end]
+        formula_chunk = formula_chunk[2:end]
     else
         lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names = parse_lik(def_lik, zalloc)
     end
-    if s[1] != '|'
+    
+    if formula_chunk[1] != '|'
         error("Expected ~|")
     end
-    s = s[2:end]
+    formula_chunk[2:end], lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, directgp
+end
 
-    # Parse the covariance function
-    xalloc = VarAllocator(variablenames, var_cat)
+function parse_cf_from_formula(formula_chunk, variablenames, var_cat, xalloc)
     θc, θc_prior, θc_names, θc_link_ex =
         Array{Float64,1}(), Array{ContinuousUnivariateDistribution,1}(),
         Array{String,1}(), Array{Any,1}()
     xex, xnames = Array{Any,1}(), Array{String,1}()
-    if occursin(r"^\s*0\s*$", s)
+    if occursin(r"^\s*0\s*$", formula_chunk)
         cf_ex = :(0.)
-        s = ""
+        formula_chunk = ""
         comps = Array{GPComponent,1}()
     else
-        cf_ex, s, needsparam, comps = parse_cf_expression(s, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
+        cf_ex, formula_chunk, needsparam, comps = parse_cf_expression(formula_chunk, θc, θc_prior, θc_names, θc_link_ex, xex, xnames, xalloc, true)
     end
 
-    # Record parse results
-    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θl_names Lik_Start=θl Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names CF_Start=θc Covariance=cf_ex
+    formula_chunk, θc, θc_prior, θc_names, θc_link_ex, cf_ex, comps, xex, xnames
+end
 
-    # GP input generators
-    xfun = generate_generator(xalloc, xex)
-    zfun = generate_generator(zalloc, zex)
-
-    # Turn the covariance function into an actual Julia function
-    cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
-    θc_link = genfun(Expr(:vect, θc_link_ex...), [:θ])
-
+function pick_gp(cf, θc_link, θc_prior, θc_names, θl_link_ex, θl_prior, θl_names, lik_ex, directgp)
     if directgp
         # No data likelihood - use simpler GP structure
         gp = DirectGP(
@@ -345,6 +330,55 @@ function parse_gp_formula(formula::String, var_names::Array{String},
             θc_link, θc_prior, θc_names, 1e-9,
             datalik, θl_link, θl_prior, θl_names)
     end
+    return gp
+end
+
+"""
+    parse_gp_formula(formula::String,
+                     var_names::Array{String},
+                     var_cat::Array{Bool};
+                     def_lik::String = "Gaussian")
+
+Parse a formula string and return a `ParsedGPFormula`
+"""
+function parse_gp_formula(formula::String, var_names::Array{String}, # should this be `Vector{String}`? Can it actually be a 2D array?
+    var_cat::Array{Bool}; def_lik::String = "Gaussian")
+    # Main entrypoint for parsing a GP formula
+    # Uses a simple hand-rolled recursive descent parser
+
+    # Not as good as a real parser, but works for our purposes
+    hasmatch, yformula, final, s = match_until_wnested(formula, Set([':', '~']))
+    if !hasmatch
+        error("Expected formula for y")
+    end
+
+    # Get potential variable names
+    variablenames, varname_set = get_varset(var_names)
+
+    yfun, yvars, yex = evaluate_y(yformula, varname_set)
+
+    # Parse the likelihood (optional)
+    zalloc = VarAllocator(variablenames, var_cat)
+    s, lik_ex, zex, znames, θl, θl_prior, θl_link_ex, θl_names, directgp = 
+        parse_lik_from_formula(s, final, def_lik, zalloc)
+
+    # Parse the covariance function
+    xalloc = VarAllocator(variablenames, var_cat)
+    s, θc, θc_prior, θc_names, θc_link_ex, cf_ex, comps, xex, xnames = 
+        parse_cf_from_formula(s, variablenames, var_cat, xalloc)
+    
+        # Record parse results
+    @info "GP formula interpretation" Observation=yex Lik_Inputs=znames Lik_Parameters=θl_names Lik_Start=θl Likelihood=lik_ex CF_Inputs=xnames CF_Parameters=θc_names CF_Start=θc Covariance=cf_ex
+
+    # GP input generators
+    xfun = generate_generator(xalloc, xex)
+    zfun = generate_generator(zalloc, zex)
+
+    # Turn the covariance function into an actual Julia function
+    cf = genfun(cf_ex, [:x1, :x2, :same, :θ])
+    θc_link = genfun(Expr(:vect, θc_link_ex...), [:θ])
+
+    gp = pick_gp(cf, θc_link, θc_prior, θc_names, θl_link_ex, θl_prior, θl_names, lik_ex, directgp)
 
     return ParsedGPFormula(
         xfun, allocated(xalloc), [getvariables(ex, xalloc) for ex in xex], xnames,
@@ -698,6 +732,7 @@ function chompw(s)
     return i > 1 ? s[i:end] : s
 end
 
+# could use `split(s, !isletter)` ?
 function chomp_name(s)
     # Chomp a name
     i = 1
