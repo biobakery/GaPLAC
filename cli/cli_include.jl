@@ -132,13 +132,13 @@ function read_atdata(args)
                     df[name] = values
                 end
             elseif isempty(df) || length(value) == size(df)[1]
-                df[name] = value
+                df[!,name] = value
             else
                 error(@sprintf("The length of %s (%d) does not match the length of earlier values (%d)", name, length(value), size(df)[1]))
             end
         elseif isa(value, UnivariateDistribution)
             # Distribution - draw random values
-            df[name] = rand.(repeat([value], inner=size(df)[1]))
+            df[!,name] = rand.(repeat([value], inner=size(df)[1]))
         else
             error(@sprintf("Unknown value in --at for %s: %s", name, m[:expr]))
         end
@@ -263,7 +263,7 @@ function gen_gp_inputs(parsedgp, data, atdata)
     # Get target data matrices
     x2, z2 = GPTool.gp_inputs(parsedgp, atdata)
     vars = union(parsedgp.xfun_params, parsedgp.zfun_params)
-    index = atdata[[(name in vars) for name in names(atdata)]]
+    index = atdata[:, [(name in vars) for name in names(atdata)]]
 
     return x, y, z, x2, z2, index
 end

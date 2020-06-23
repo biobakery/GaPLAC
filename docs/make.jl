@@ -3,7 +3,7 @@ using Documenter
 
 makedocs(;
     modules=[GPTool],
-    authors="",
+    authors=["Kevin Bonham, PhD", "Jason Lloyde-Price, PhD"]
     repo="https://github.com/biobakery/gptool.jl/blob/{commit}{path}#L{line}",
     sitename="gptool.jl",
     format=Documenter.HTML(;

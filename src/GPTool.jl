@@ -3,11 +3,9 @@ module GPTool
 using DataFrames
 using CSV
 using Plots
-using Logging
 using Printf
 using Distributions
 using Statistics
-using ArgParse
 using LinearAlgebra
 using ForwardDiff
 using FastGaussQuadrature

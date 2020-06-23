@@ -120,3 +120,10 @@ end
 #         rm(f)
 #     end
 # end
+
+@testset "CLI" begin
+    pred = "testout/prediction.tsv"
+    isfile(pred) && rm(pred)
+    run(`julia ../cli/main.jl predict "bug ~| Cat(PersonID) * Cat(StoolPairs) + Cat(PersonID) + Linear(nutrient)" --data ./testin/input_pair_1003.tsv --mcmc ./testin/mcmc_1003.tsv --at "nutrient=-5:0.1:5;PersonID=0;StoolPairs=0" --output testout/prediction.tsv`)
+    @test isfile(pred)
+end
