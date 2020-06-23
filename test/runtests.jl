@@ -82,10 +82,8 @@ end
 
 @testset "API" begin
     
-    for f in ["gp.pdf", "out.tsv", "sampleplot.png"]
-        isfile(f) && rm(f)
-    end
-
+    isdir("testout/") && rm("testout", force = true)
+    mkdir("testout/")
     Random.seed!(42)
 
     gp = GPTool.parse_gp_formula("y : Gaussian(.01) ~| SExp(t; l=1.5)*Constant(1)", ["t", "y"], [false, false])
