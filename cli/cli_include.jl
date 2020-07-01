@@ -212,7 +212,7 @@ end
 
 function write_mcmc(chain, filename, append)
     file = filename == "stdout" ? stdout : filename
-    write_chains(chain, file; append=append)
+    GPTool.write_chains(chain, file; append=append)
 
     @info @sprintf("%s %d MCMC samples to %s", append ? "Appended" : "Wrote", size(chain.df,1), filename)
 end
@@ -357,10 +357,10 @@ function cmd_mcmc_cont(args, parsedgp, data)
     samples = args["samples"]
 
     # Run the chain
-    chain = mcmcgp(parsedgp.gp, x, y, z, start_θ, burnin + 1 + thinning * (samples-1))
+    chain = GPTool.mcmcgp(parsedgp.gp, x, y, z, start_θ, burnin + 1 + thinning * (samples-1))
 
     # Thinning
-    chain = thin(chain, burnin, thinning)
+    chain = GPTool.thin(chain, burnin, thinning)
 
     # Output chains
     write_mcmc(chain, args["output"], !isa(args["mcmc"], Nothing))
