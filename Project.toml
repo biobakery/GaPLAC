@@ -18,12 +18,13 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 ArgParse = "0.6"
-CSV = "0.5"
-CategoricalArrays = "0.7.4"
-DataFrames = "0.19"
-Distributions = "0.21"
+CSV = "0.5 - 0.7"
+CategoricalArrays = "0.7.4 - 0.8"
+DataFrames = "0.19 - 0.21"
+Distributions = "0.21 - 0.23"
 FastGaussQuadrature = "0.4"
 ForwardDiff = "0.10"
+Plots = "1"
 julia = "1"
 
 [extras]

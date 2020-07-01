@@ -82,7 +82,7 @@ end
 
 @testset "API" begin
     
-    isdir("testout/") && rm("testout", force = true)
+    isdir("testout/") && rm("testout", recurssive=true, force = true)
     mkdir("testout/")
     Random.seed!(42)
 
