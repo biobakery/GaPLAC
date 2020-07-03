@@ -6,6 +6,8 @@
 # TODO: Errors from these functions could provide better context so that
 # finding the actual problem in the formula is easier
 
+
+
 struct Delta{T<:Real} <: ContinuousUnivariateDistribution
     # The single value of the distribution
     value::T
@@ -776,3 +778,13 @@ getvariables(ex, vars::Set{Symbol}) = Set{Symbol}()
 getvariables(ex::Symbol, vars::Set{Symbol}) = ex in vars ? Set{Symbol}([ex]) : Set{Symbol}()
 getvariables(ex::Expr, vars::Set{Symbol}) = foldl(union, [getvariables(exa, vars) for exa in ex.args])
 getvariables(ex, vars::VarAllocator) = getvariables(ex, vars.varset)
+
+
+"""
+    splitgpformula(::AbstractString)
+
+Divide forumla into component parts.
+"""
+function splitgpformual(formula::AbstractString)
+    formula = split(forumula, r"[:(~|)]")
+end
