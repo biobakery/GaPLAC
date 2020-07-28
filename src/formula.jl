@@ -783,8 +783,11 @@ getvariables(ex, vars::VarAllocator) = getvariables(ex, vars.varset)
 """
     splitgpformula(::AbstractString)
 
-Divide forumla into component parts.
+Divide forumla into component parts,
+return 3-part Tuple.
 """
-function splitgpformual(formula::AbstractString)
-    formula = split(forumula, r"[:(~|)]")
+function splitgpformula(formula::AbstractString)
+    formula = split(formula, r":|(~\|)")
+    strip.(formula)
 end
+
