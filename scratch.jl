@@ -5,6 +5,7 @@ using Distributions
 using StatsPlots
 using Distances
 using LinearAlgebra
+using StatsModels
 using AbstractGPs, KernelFunctions
 
 
@@ -38,7 +39,7 @@ sekernel(alpha, rho) =
     
     # Priors.
     mu ~ Normal(0, 1)
-    sig2 ~ LogNormal(0, 1)
+    sig2 ~ LogNormal(3, 1)
     alpha ~ LogNormal(0, 0.1)
     rho ~ LogNormal(0, 1)
 
@@ -59,14 +60,16 @@ gp = myGP(df.bug,
 @time chain = sample(gp, HMC(0.01, 100), 200)
 
 plot(chain)
+
 savefig("~/Desktop/plot.png")
-ip1.t = map(t-> t + randn()/100, ip1.StoolPairs)
-ip1.s = map(t-> t + randn()/100, ip1.subject)
 
+mf = ModelFrame(@formula(bug ~ -1 + subject + nutrient),
+                ip1,
+                contrasts = Dict(:subject => StatsModels.FullDummyCoding()))
+Z = modelmatrix(mf)
 
-gp2 = myGP(ip1.bug,
-    Matrix(ip1[!,[:s, :nutrient]]),
-    Matrix{Float64}(ip1[!,[:t]]))
+gp2 = myGP(ip1.bug, Z,
+    Matrix{Float64}(ip1[!,[:Date]]))
 
 @time chain2 = sample(gp2, HMC(0.01, 100), 200)
 
