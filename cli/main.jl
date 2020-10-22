@@ -9,7 +9,7 @@ using ArgParse
 function parse_cmdline()
     s = ArgParseSettings()
 
-    @add_arg_table s begin
+    @add_arg_table! s begin
         "mcmc"
             help = "Run MCMC to optimize hyperparameters"
             action = :command
@@ -32,7 +32,7 @@ function parse_cmdline()
             action = :store_true
     end
 
-    @add_arg_table s["mcmc"] begin
+    @add_arg_table! s["mcmc"] begin
         "formula"
             help = "Gaussian Process formula"
             required = true
@@ -67,7 +67,7 @@ function parse_cmdline()
             default = "stdout"
     end
 
-    @add_arg_table s["predict"] begin
+    @add_arg_table! s["predict"] begin
         "formula"
             help = "Gaussian Process formula"
             required = true
@@ -94,7 +94,7 @@ function parse_cmdline()
             default = "stdout"
     end
 
-    @add_arg_table s["sample"] begin
+    @add_arg_table! s["sample"] begin
         "formula"
             help = "Gaussian Process formula"
             required = true
@@ -124,7 +124,7 @@ function parse_cmdline()
             help = "X axis of the sample plot; can also be \"x:group\" to provide a grouping variable as well"
     end
 
-    @add_arg_table s["fitplot"] begin
+    @add_arg_table! s["fitplot"] begin
         "formula"
             help = "Gaussian Process formula"
             required = true
@@ -149,7 +149,7 @@ function parse_cmdline()
             default = "fitplots.pdf"
     end
 
-    @add_arg_table s["select"] begin
+    @add_arg_table! s["select"] begin
         "--mcmc", "-m"
             help = "MCMC samples for hyperparameters, does NOT support --data format flags"
         "--mcmc2", "-c"
@@ -162,25 +162,28 @@ end
 include("cli_include.jl")
 
 
-# Main
-args = parse_cmdline()
+function main()
+    args = parse_cmdline()
 
-# Redirect logging to a file if necessary
-loglevel = args["debug"] ? Logging.Debug : Logging.Info
-if !isa(args["log"], Nothing)
-    io = open(args["log"], "w+")
-    logger = SimpleLogger(io, loglevel)
-    global_logger(logger)
-else
-    logger = ConsoleLogger(stderr, loglevel; show_limited=false)
-    global_logger(logger)
+    # Redirect logging to a file if necessary
+    loglevel = args["debug"] ? Logging.Debug : Logging.Info
+    if !isa(args["log"], Nothing)
+        io = open(args["log"], "w+")
+        logger = SimpleLogger(io, loglevel)
+        global_logger(logger)
+    else
+        logger = ConsoleLogger(stderr, loglevel; show_limited=false)
+        global_logger(logger)
+    end
+
+    # Process commands
+    processcmd(args)
+
+    # Clean up
+    if !isa(args["log"], Nothing)
+        flush(io)
+        close(io)
+    end
 end
 
-# Process commands
-processcmd(args)
-
-# Clean up
-if !isa(args["log"], Nothing)
-    flush(io)
-    close(io)
-end
+main()
