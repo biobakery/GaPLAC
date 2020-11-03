@@ -19,58 +19,33 @@ df = DataFrame(
 
 ip1 = CSV.File("test/testin/input_pair_109.tsv") |> DataFrame
 
-function numbsubj(subjects)
-    id = Dict(s=> i for (i,s) in enumerate(subjects))
+@model GPRegression(y, df) = begin
+    param_1, param_2, param_3, noise = ones(4)
+    k_nutrient = AbstractGPs.transform(LinearKernel(), param_1) # kernel for nutrient
+    k_obese = AbstractGPs.transform(LinearKernel(), param_2) # kernel for obese
+    k_t = AbstractGPs.transform(SqExponentialKernel(), param_3) # kernel for time
+    k = TensorProduct([k_nutrient, k_obese, k_t]) # Collect all the kernels to make them act dimension wise
+    
+    # Here we create a the prior based on the kernel and the data
+    priorgp = AbstractGPs.FiniteGP(GP(k), hcat(df.obese, df.nutrient, df.timepoint), noise, obsdim = 1) # Not sure about the dimensionality here
+    f ~ priorgp
+    for i in 1:size(df,1)
+        y[i] ~ Normal(f[i], noise)
+    end
 
-    return [id[s] * 1000 for s in subjects]
 end
 
-ip1.subject = numbsubj(ip1.PersonID)
-
-
-sekernel(alpha, rho) = 
-  alpha^2 * KernelFunctions.transform(SEKernel(), sqrt(0.5)/rho)
-
-@model function myGP(y, X, T, jitter=1e-6)
-    N, P = size(T)  # Note that T needs to have dimension Nx1 (a matrix)
-    
-    # Dimensions of linear model predictors
-    J = size(X, 2)  # X should be N x J
-    
-    # Priors.
-    mu ~ Normal(0, 1)
-    sig2 ~ LogNormal(3, 1)
-    alpha ~ LogNormal(0, 0.1)
-    rho ~ LogNormal(0, 1)
-
-    beta ~ filldist(Normal(0, 1), J) # Prior for linear model coefficients
-    
-    # GP Covariance matrix
-    kernel = sekernel(alpha, rho)  # covariance function
-    K = kernelmatrix(kernel, T, obsdim=1)  # cov matrix
-    K += LinearAlgebra.I * (sig2 + jitter) # jitter for numerical stability
-
-    y ~ MvNormal(mu .+ X * beta, K) # Sampling Distribution.
-end
-
-gp = myGP(df.bug,
-          Matrix(df[!,[:subject, :obese, :nutrient]]),
-          Matrix{Float64}(df[!,[:timepoint]]))
+gp = GPRegression(df.bug, df)
 
 @time chain = sample(gp, HMC(0.01, 100), 200)
 
-plot(chain)
+using Turing, Distributions
 
-savefig("~/Desktop/plot.png")
+# Import MCMCChains, Plots, and StatPlots for visualizations and diagnostics.
+using MCMCChains, StatsPlots
 
-mf = ModelFrame(@formula(bug ~ -1 + subject + nutrient),
-                ip1,
-                contrasts = Dict(:subject => StatsModels.FullDummyCoding()))
-Z = modelmatrix(mf)
+# Functionality for splitting and normalizing the data.
+using MLDataUtils: shuffleobs, splitobs, rescale!
 
-gp2 = myGP(ip1.bug, Z,
-    Matrix{Float64}(ip1[!,[:Date]]))
-
-@time chain2 = sample(gp2, HMC(0.01, 100), 200)
-
-plot(chain2)
+# Functionality for evaluating the model predictions.
+using Distances
