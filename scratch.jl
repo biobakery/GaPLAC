@@ -91,7 +91,7 @@ log2(mean(r1[:lp] .^2) / mean(r2[:lp] .^2))
     noise_sd ~ LogNormal(0, 1)  # eps_{s,j} ~ Normal(0, noise_sd)  
 
     m = intercept .+ diet * diet_effect + subject_effects[subj]
-    bug .~ Normal.(m, noise_sd)  # you may need a different likelihood depending on the range of "bug".
+    bug .~ Normal.(m, noise_sd)
 end
 
 mm1 = mixedmodel1(ip1.nutrient, ip1.bug, ip1.pid)
@@ -108,7 +108,7 @@ log2(mean(r1[:lp] .^2) / mean(rmm1[:lp] .^2))
     noise_sd ~ LogNormal(0, 1)  # eps_{s,j} ~ Normal(0, noise_sd)  
 
     m = intercept .+ subject_effects[subj]
-    bug .~ Normal.(m, noise_sd)  # you may need a different likelihood depending on the range of "bug".
+    bug .~ Normal.(m, noise_sd)
 end
 
 mm2 = mixedmodel2(ip1.bug, ip1.pid)
@@ -118,9 +118,74 @@ mm2 = mixedmodel2(ip1.bug, ip1.pid)
 # log bayes
 log2(mean(rmm1[:lp] .^2) / mean(rmm2[:lp] .^2))
 
-rmm1[:diet_effect]
 
-plot(rmm1)
+ip2 = CSV.File("test/testin/input_pair_109.tsv") |> DataFrame
+ip2 = ip2[completecases(ip2), :]
+pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip2.PersonID)))
+ip2.pid = [pidmap[p] for p in ip2.PersonID]
+ip2.datemod = [d+rand(Normal(0, 0.1)) for d in ip2.Date]
+
+scorr2 = subjectcorrmat(ip2.pid)
+gpm12 = GPmodel1(ip2.bug, ip2.nutrient, scorr2, ip2.datemod)
+@time r12 = sample(gpm12, HMC(0.1,20), 100)
+gpm22 = GPmodel2(ip2.bug, ip2.pid, ip2.datemod)
+@time r22 = sample(gpm22, HMC(0.1,20), 100);
+
+# log bayes
+log2(mean(r12[:lp] .^2) / mean(r22[:lp] .^2))
+
+
+################
+# Benchmarking #
+################
+using BenchmarkTools
+
+@model function exteriorkernel(bug, K_time, K_diet, jitter=1e-6, T=Float64)
+    nobs = length(bug)
+    # assume zero mean
+    μ = zeros(T, nobs)
+      
+    # jitter for numerical stability
+    σ2 ~ LogNormal(0, 1)
+    K_time += LinearAlgebra.I * (σ2 + jitter)
+
+    bug ~ MvNormal(μ, K_time .+ K_diet)
+end
+
+@model function exteriortime(bug, diet, K_time, jitter=1e-6, T=Float64)
+    nobs = length(bug)
+    # assume zero mean
+    μ = zeros(T, nobs)
+    
+    # diet covariance
+    c ~ Normal(0, 1)
+    K_diet = kernelmatrix(LinearKernel(c=c), reshape(diet, length(diet),1), obsdim=1)
+    
+    # jitter for numerical stability
+    σ2 ~ LogNormal(0, 1)
+    K_time += LinearAlgebra.I * (σ2 + jitter)
+
+    bug ~ MvNormal(μ, K_time .+ K_diet)
+end
+
+s = ip1.pid[1:200]
+b = ip1.pid[1:200]   
+d = ip1.nutrient[1:200]    
+t = ip1.datemod[1:200]    
+sc = subjectcorrmat(s)
+   
+K_diet = kernelmatrix(LinearKernel(), reshape(d, length(d),1), obsdim=1)
+K_time = kernelmatrix(Matern52Kernel(), reshape(t, length(t), 1), obsdim=1)  # cov matrix for time
+# remove cross-person covariance
+K_time = K_time .* sc
+
+gp1 = GPmodel1(b, d, sc, t)
+gp2 = exteriorkernel(b, K_time, K_diet)
+gp3 = exteriortime(b, d, K_time)
+
+@btime sample($gp1, HMC(0.1,20), 100)
+@btime sample($gp2, HMC(0.1,20), 100)
+@btime sample($gp3, HMC(0.1,20), 100)
 
 ############
 # Plotting #
