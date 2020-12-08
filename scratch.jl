@@ -16,7 +16,13 @@ ip1 = CSV.File("test/testin/input_pair_1609.tsv") |> DataFrame
 ip1 = ip1[completecases(ip1), :]
 pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip1.PersonID)))
 ip1.pid = [pidmap[p] for p in ip1.PersonID]
-ip1.datemod = [d+rand(Normal(0, 0.1)) for d in ip1.Date]
+ip1.datemod = [d+rand(Normal(0, 0.2)) for d in ip1.Date]
+ip1.dietmod = [d+rand(Normal(0, 0.2)) for d in ip1.nutrient]
+ip1.bugmod = [b+rand(Normal(0, 0.2)) for b in ip1.bug]
+@chain ip1 begin
+    groupby(:pid)
+    transform!(:pid => length => :nsamples)
+end
 
 # sekernel(alpha, rho) = 
 #   alpha^2 * KernelFunctions.transform(SEKernel(), sqrt(0.5)/rho)
@@ -37,7 +43,7 @@ end
     μ = zeros(T, nobs)
     
     # diet covariance
-    c ~ Normal(0, 1)
+    c ~ LogNormal(0, 1)
     K_diet = kernelmatrix(LinearKernel(c=c), reshape(diet, length(diet),1), obsdim=1)
     
     # time covariance
@@ -47,38 +53,43 @@ end
     
     # jitter for numerical stability
     σ2 ~ LogNormal(0, 1)
+    # K_diet += LinearAlgebra.I * (σ2 + jitter)
     K_time += LinearAlgebra.I * (σ2 + jitter)
 
     bug ~ MvNormal(μ, K_time .+ K_diet)
 end
 
 scorr = subjectcorrmat(ip1.pid)
-gpm1 = GPmodel1(ip1.bug, ip1.nutrient, scorr, ip1.datemod)
+gpm1 = GPmodel1(ip1.bugmod, ip1.nutrient, scorr, ip1.datemod)
 @time r1 = sample(gpm1, HMC(0.1,20), 100)
 
-@model function GPmodel2(bug, subj, tp, jitter=1e-6, T=Float64)
+plot(r1)
+
+@model function GPmodel2(bug, subjcorr, tp, jitter=1e-6, T=Float64)
     nobs = length(bug)
     # assume zero mean
     μ = zeros(T, nobs)
         
     # time covariance
     K_time = kernelmatrix(Matern52Kernel(), reshape(tp, length(tp), 1), obsdim=1)  # cov matrix for time
-    
     # remove cross-person covariance
-    scov = subjectcorrmat(subj, T)
-    K_time = K_time .* scov
+    K_time = K_time .* subjcorr
     
     # jitter for numerical stability
     σ2 ~ LogNormal(0, 1)
+    # K_diet += LinearAlgebra.I * (σ2 + jitter)
     K_time += LinearAlgebra.I * (σ2 + jitter)
 
     bug ~ MvNormal(μ, K_time)
 end
 
-gpm2 = GPmodel2(ip1.bug, ip1.pid, ip1.datemod)
+gpm2 = GPmodel2(ip1.bug, scorr, ip1.datemod)
 @time r2 = sample(gpm2, HMC(0.1,20), 100);
 
 # log bayes
+r1[:lp]
+log2(mean(map(x-> 2. ^ x, r1[:lp])) / mean(map(x-> 2. ^ x, r2[:lp])))
+
 log2(mean(r1[:lp] .^2) / mean(r2[:lp] .^2))
 
 
@@ -158,7 +169,7 @@ end
     μ = zeros(T, nobs)
     
     # diet covariance
-    c ~ Normal(0, 1)
+    c ~ LogNormal(0, 1)
     K_diet = kernelmatrix(LinearKernel(c=c), reshape(diet, length(diet),1), obsdim=1)
     
     # jitter for numerical stability
@@ -169,7 +180,7 @@ end
 end
 
 s = ip1.pid[1:200]
-b = ip1.pid[1:200]   
+b = ip1.bug[1:200]   
 d = ip1.nutrient[1:200]    
 t = ip1.datemod[1:200]    
 sc = subjectcorrmat(s)
@@ -192,7 +203,6 @@ gp3 = exteriortime(b, d, K_time)
 ############
 
 using StatsPlots
-using Chain
 
 @chain ip1 begin
     groupby(:pid)
@@ -226,10 +236,8 @@ end
                                             xlabel="Time", ylabel="Bug", label="Date + rand")
 
 
-@df ip1 plot(:normDate, :nutrient, group=:pid, legend=false,
-             xlabel="Time", ylabel="Diet")
-
-@df ip1 scatter(:nutrient, :bug, legend=false,
-                ylabel="Bug", xlabel="Diet")
-
-plot(r1)
+@df ip1 scatter(:bug, :nutrient, color=:gray,
+            xlabel="Bug", ylabel="Nutrient", label="Diet")
+@df ip1 scatter!(:bug, :dietmod, color=:blue, alpha=0.2,
+            xlabel="Bug", ylabel="Nutrient", label="Diet + rand")
+                               
