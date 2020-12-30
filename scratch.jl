@@ -1,69 +1,4 @@
-using CSV
-using DataFrames
-using DataFrames: transform, transform!
-using Turing
-using Distributions
-using AbstractGPs, KernelFunctions
-using LinearAlgebra
-using StatsPlots
-using Chain
-using Random
-
-# using ReverseDiff
-# using Zygote
-# Turing.setadbackend(:forwarddiff)
-
-function subjectcorrmat(subjects)
-    n = length(subjects)
-    scov = zeros(Bool, n, n)
-    # if same person, true, otherwise, false
-    for i in 1:n, j in 1:n
-        subjects[i] == subjects[j] && (scov[i,j] = true)
-    end
-    return scov
-end
-
-@model function GPmodel1(bug, diet, subjcorr, tp, jitter=1e-6, T=Float64)
-    nobs = length(bug)
-    # assume zero mean
-    μ = zeros(T, nobs)
-    
-    # diet covariance
-    c ~ LogNormal(0, 1)
-    K_diet = kernelmatrix(LinearKernel(c=c), reshape(diet, length(diet),1), obsdim=1)
-    
-    # time covariance
-    K_time = kernelmatrix(Matern52Kernel(), reshape(tp, length(tp), 1), obsdim=1)  # cov matrix for time
-    # remove cross-person covariance
-    K_time = K_time .* subjcorr
-    
-    # jitter for numerical stability
-    σ2 ~ LogNormal(0, 1)
-    # K_diet += LinearAlgebra.I * (σ2 + jitter)
-    K_time += LinearAlgebra.I * (σ2 + jitter)
-
-    bug ~ MvNormal(μ, K_time .+ K_diet)
-end
-
-@model function GPmodel2(bug, subjcorr, tp, jitter=1e-6, T=Float64)
-    nobs = length(bug)
-    # assume zero mean
-    μ = zeros(T, nobs)
-        
-    # time covariance
-    K_time = kernelmatrix(Matern52Kernel(), reshape(tp, length(tp), 1), obsdim=1)  # cov matrix for time
-    # remove cross-person covariance
-    K_time = K_time .* subjcorr
-    
-    # jitter for numerical stability
-    σ2 ~ LogNormal(0, 1)
-    # K_diet += LinearAlgebra.I * (σ2 + jitter)
-    K_time += LinearAlgebra.I * (σ2 + jitter)
-
-    bug ~ MvNormal(μ, K_time)
-end
-
-log2bayes(s1, s2) = log2(mean(map(x-> 2. ^ x, s1[:lp])) / mean(map(x-> 2. ^ x, s2[:lp])))
+include("dietmodels.jl")
 
 ## -- Fake Data -- ##
 
@@ -110,38 +45,40 @@ function run_sim(nsub, dietdist=Normal())
     return (ind=ind_l2b, diet1=diet_l2b, diet2=diet2_l2b)
 end
  
-run_sim(4)
-df = DataFrame([run_sim(4) for _ in 100])
-
-## -- Real Data -- ##
-
-ip1 = CSV.File("test/testin/input_pair_1609.tsv") |> DataFrame
-ip1 = ip1[completecases(ip1), :]
-pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip1.PersonID)))
-ip1.pid = [pidmap[p] for p in ip1.PersonID]
-ip1.datemod = [d+rand(Normal(0, 0.2)) for d in ip1.Date]
-ip1.dietmod = [d+rand(Normal(0, 0.2)) for d in ip1.nutrient]
-ip1.bugmod = [b+rand(Normal(0, 0.2)) for b in ip1.bug]
-@chain ip1 begin
-    groupby(:pid)
-    transform!(:pid => length => :nsamples)
+df4 = DataFrame()
+for _ in 1:100
+    push!(df4, run_sim(4))
 end
 
-scorr = subjectcorrmat(ip1.pid)
-gpm1 = GPmodel1(ip1.bugmod, ip1.nutrient, scorr, ip1.datemod)
-@time r1 = sample(gpm1, HMC(0.1,20), 100)
+df20 = DataFrame()
+for i in 1:20
+    @info i
+    push!(df20, run_sim(20, Normal(0,0.2)))
+end
 
-plot(r1)
+subj = repeat(1:5, inner=4)
+tp = repeat([1,2,9,10], outer=5) 
+bugind = let base = randn(4*5)
+    for (i, b) in enumerate(base)
+        if isodd(i % 4)
+            base[i] = b + base[i+1]
+        end
+    end
+    base
+end
+diet = rand(Normal(), 4*5)
+bugdiet = bugind .+ 1 .* diet # diet effect
+bugdiet2 = bugind .+ 2 .* diet # bigger diet effect
+sc = subjectcorrmat(subj)
 
-gpm2 = GPmodel2(ip1.bug, scorr, ip1.datemod)
-@time r2 = sample(gpm2, HMC(0.1,20), 100);
+ind_gp1 = GPmodel1(bugind, diet, sc, tp)
+ind_samp1 = sample(ind_gp1, HMC(0.1,20), 100)
 
-# log bayes
-r1[:lp]
-log2(mean(map(x-> 2. ^ x, r1[:lp])) / mean(map(x-> 2. ^ x, r2[:lp])))
-
-log2(mean(r1[:lp] .^2) / mean(r2[:lp] .^2))
-
+ind_samp1[:lp][chain=1]
+ind_samp1[:σ2][chain=1,iter=:]
+ind_samp1[:c][chain=1] |>collect
+dump(ind_samp1)
+df = DataFrame()
 
 @model function mixedmodel1(bug, diet, subj)
     num_subjects = length(unique(subj))  # number of subjects
