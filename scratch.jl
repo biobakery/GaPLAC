@@ -12,20 +12,6 @@ using Random
 # using ReverseDiff
 # using Zygote
 # Turing.setadbackend(:forwarddiff)
-ip1 = CSV.File("test/testin/input_pair_1609.tsv") |> DataFrame
-ip1 = ip1[completecases(ip1), :]
-pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip1.PersonID)))
-ip1.pid = [pidmap[p] for p in ip1.PersonID]
-ip1.datemod = [d+rand(Normal(0, 0.2)) for d in ip1.Date]
-ip1.dietmod = [d+rand(Normal(0, 0.2)) for d in ip1.nutrient]
-ip1.bugmod = [b+rand(Normal(0, 0.2)) for b in ip1.bug]
-@chain ip1 begin
-    groupby(:pid)
-    transform!(:pid => length => :nsamples)
-end
-
-# sekernel(alpha, rho) = 
-#   alpha^2 * KernelFunctions.transform(SEKernel(), sqrt(0.5)/rho)
 
 function subjectcorrmat(subjects)
     n = length(subjects)
@@ -59,12 +45,6 @@ end
     bug ~ MvNormal(μ, K_time .+ K_diet)
 end
 
-scorr = subjectcorrmat(ip1.pid)
-gpm1 = GPmodel1(ip1.bugmod, ip1.nutrient, scorr, ip1.datemod)
-@time r1 = sample(gpm1, HMC(0.1,20), 100)
-
-plot(r1)
-
 @model function GPmodel2(bug, subjcorr, tp, jitter=1e-6, T=Float64)
     nobs = length(bug)
     # assume zero mean
@@ -82,6 +62,76 @@ plot(r1)
 
     bug ~ MvNormal(μ, K_time)
 end
+
+log2bayes(s1, s2) = log2(mean(map(x-> 2. ^ x, s1[:lp])) / mean(map(x-> 2. ^ x, s2[:lp])))
+
+## -- Fake Data -- ##
+
+function run_sim(nsub, dietdist=Normal())
+    subj = repeat(1:nsub, inner=4)
+    tp = repeat([1,2,9,10], outer=nsub) 
+    bugind = let base = randn(4*nsub)
+        for (i, b) in enumerate(base)
+            if isodd(i % 4)
+                base[i] = b + base[i+1]
+            end
+        end
+        base
+    end
+    diet = rand(dietdist, 4*nsub)
+    bugdiet = bugind .+ 1 .* diet # diet effect
+    bugdiet2 = bugind .+ 2 .* diet # bigger diet effect
+    sc = subjectcorrmat(subj)
+
+    ind_gp1 = GPmodel1(bugind, diet, sc, tp)
+    ind_samp1 = sample(ind_gp1, HMC(0.1,20), 100)
+
+    ind_gp2 = GPmodel2(bugind, sc, tp)
+    ind_samp2 = sample(ind_gp2, HMC(0.1,20), 100)
+
+    ind_l2b = log2bayes(ind_samp1, ind_samp2)
+
+    diet_gp1 = GPmodel1(bugdiet, diet, sc, tp)
+    diet_samp1 = sample(diet_gp1, HMC(0.1,20), 100)
+
+    diet_gp2 = GPmodel2(bugdiet, sc, tp)
+    diet_samp2 = sample(diet_gp2, HMC(0.1,20), 100)
+
+    diet_l2b = log2bayes(diet_samp1, diet_samp2)
+
+    diet2_gp1 = GPmodel1(bugdiet2, diet, sc, tp)
+    diet2_samp1 = sample(diet2_gp1, HMC(0.1,20), 100)
+
+    diet2_gp2 = GPmodel2(bugdiet2, sc, tp)
+    diet2_samp2 = sample(diet2_gp2, HMC(0.1,20), 100)
+
+    diet2_l2b = log2bayes(diet2_samp1, diet2_samp2)
+    
+    return (ind=ind_l2b, diet1=diet_l2b, diet2=diet2_l2b)
+end
+ 
+run_sim(4)
+df = DataFrame([run_sim(4) for _ in 100])
+
+## -- Real Data -- ##
+
+ip1 = CSV.File("test/testin/input_pair_1609.tsv") |> DataFrame
+ip1 = ip1[completecases(ip1), :]
+pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip1.PersonID)))
+ip1.pid = [pidmap[p] for p in ip1.PersonID]
+ip1.datemod = [d+rand(Normal(0, 0.2)) for d in ip1.Date]
+ip1.dietmod = [d+rand(Normal(0, 0.2)) for d in ip1.nutrient]
+ip1.bugmod = [b+rand(Normal(0, 0.2)) for b in ip1.bug]
+@chain ip1 begin
+    groupby(:pid)
+    transform!(:pid => length => :nsamples)
+end
+
+scorr = subjectcorrmat(ip1.pid)
+gpm1 = GPmodel1(ip1.bugmod, ip1.nutrient, scorr, ip1.datemod)
+@time r1 = sample(gpm1, HMC(0.1,20), 100)
+
+plot(r1)
 
 gpm2 = GPmodel2(ip1.bug, scorr, ip1.datemod)
 @time r2 = sample(gpm2, HMC(0.1,20), 100);
