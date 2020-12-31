@@ -32,7 +32,7 @@ r2 = sample(gpm2, HMC(0.1,20), 100);
 
 l2b = log2bayes(r1, r2)
 
-baysfile = joinpath(outdir, prefix*"_log2bayes.txt")
+bayesfile = joinpath(outdir, prefix*"_log2bayes.txt")
 write(bayesfile, string(l2b)*'\n')
 
 result_df = DataFrame()
