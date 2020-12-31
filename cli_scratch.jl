@@ -14,13 +14,7 @@ pidmap = Dict(p=>i for (i,p) in enumerate(unique(df.PersonID)))
 df.pid = [pidmap[p] for p in df.PersonID]
 
 df.datemod = [d+rand(Normal(0, 0.2)) for d in df.Date]
-df.dietmod = [d+rand(Normal(0, 0.2)) for d in df.nutrient]
 df.bugmod = [b+rand(Normal(0, 0.2)) for b in df.bug]
-
-@chain df begin
-    groupby(:pid)
-    transform!(:pid => length => :nsamples)
-end
 
 scorr = subjectcorrmat(df.pid)
 
@@ -31,7 +25,7 @@ r1 = sample(gpm1, HMC(0.1,20), 100)
 
 @info "Sampling from second model"
 
-gpm2 = GPmodel2(df.bug, scorr, df.datemod)
+gpm2 = GPmodel2(df.bugmod, scorr, df.datemod)
 r2 = sample(gpm2, HMC(0.1,20), 100);
 
 @info "Writing outputs"
