@@ -1,12 +1,12 @@
 include("dietmodels.jl")
 
-# infile = ARGS[1]
-# outdir = ARGS[2]
-# prefix = ARGS[3]
-pairid = 1609
-infile = "test/testin/input_pair_$pairid.tsv"
-outdir = "test/testout/"
-prefix = "pair_$pairid"
+infile = ARGS[1]
+outdir = ARGS[2]
+prefix = ARGS[3]
+# pairid = 1609
+# infile = "test/testin/input_pair_$pairid.tsv"
+# outdir = "test/testout/"
+# prefix = "pair_$pairid"
 
 @info "Getting started" infile outdir prefix
 
