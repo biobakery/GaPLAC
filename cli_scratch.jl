@@ -1,8 +1,12 @@
 include("dietmodels.jl")
 
-infile = ARGS[1]
-outdir = ARGS[2]
-prefix = ARGS[3]
+# infile = ARGS[1]
+# outdir = ARGS[2]
+# prefix = ARGS[3]
+pairid = 1609
+infile = "test/testin/input_pair_$pairid.tsv"
+outdir = "test/testout/"
+prefix = "pair_$pairid"
 
 @info "Getting started" infile outdir prefix
 
@@ -41,6 +45,8 @@ result_df.model1_σ2 = r1[:σ2][chain=1] |> collect
 result_df.model1_c = r1[:c][chain=1] |> collect 
 result_df.model2_lp = r2[:lp][chain=1] |> collect
 result_df.model2_σ2 = r2[:σ2][chain=1] |> collect
+
+result_df.model2_lp
 
 result_file = joinpath(outdir, prefix*"_results.csv")
 CSV.write(result_file, result_df)

@@ -1,7 +1,6 @@
 include("dietmodels.jl")
 
 ## -- Fake Data -- ##
-
 function run_sim(nsub, dietdist=Normal())
     subj = repeat(1:nsub, inner=4)
     tp = repeat([1,2,9,10], outer=nsub) 
@@ -45,6 +44,7 @@ function run_sim(nsub, dietdist=Normal())
     return (ind=ind_l2b, diet1=diet_l2b, diet2=diet2_l2b)
 end
  
+
 df4 = DataFrame()
 for _ in 1:100
     push!(df4, run_sim(4))
@@ -121,12 +121,13 @@ ip2 = CSV.File("test/testin/input_pair_109.tsv") |> DataFrame
 ip2 = ip2[completecases(ip2), :]
 pidmap = Dict(p=>i for (i,p) in enumerate(unique(ip2.PersonID)))
 ip2.pid = [pidmap[p] for p in ip2.PersonID]
-ip2.datemod = [d+rand(Normal(0, 0.1)) for d in ip2.Date]
+ip2.datemod = [d+rand(Normal(0, 0.2)) for d in ip2.Date]
+ip2.bugmod = [b+rand(Normal(0, 0.2)) for b in ip2.bug]
 
 scorr2 = subjectcorrmat(ip2.pid)
-gpm12 = GPmodel1(ip2.bug, ip2.nutrient, scorr2, ip2.datemod)
+gpm12 = GPmodel1(ip2.bugmod, ip2.nutrient, scorr2, ip2.datemod)
 @time r12 = sample(gpm12, HMC(0.1,20), 100)
-gpm22 = GPmodel2(ip2.bug, ip2.pid, ip2.datemod)
+gpm22 = GPmodel2(ip2.bugmod, ip2.pid, ip2.datemod)
 @time r22 = sample(gpm22, HMC(0.1,20), 100);
 
 # log bayes

@@ -62,4 +62,7 @@ end
     bug ~ MvNormal(μ, K_time)
 end
 
-log2bayes(s1, s2) = log2(mean(map(x-> 2. ^ x, s1[:lp])) / mean(map(x-> 2. ^ x, s2[:lp])))
+function log2bayes(s1, s2)
+    l2b = log2(mean(map(x-> 2. ^ x, s1[:lp])) / mean(map(x-> 2. ^ x, s2[:lp])))
+    return l2b, mean(s1[:lp]), mean(s1[:lp])
+end
