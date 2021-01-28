@@ -1,12 +1,16 @@
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
 include("dietmodels.jl")
 
 infile = ARGS[1]
 outdir = ARGS[2]
 prefix = ARGS[3]
-# pairid = 1609
+# pairid = 3206
 # infile = "test/testin/input_pair_$pairid.tsv"
 # outdir = "test/testout/"
-# prefix = "pair_$pairid"
+# prefix = "pair_$pairid-2"
 
 @info "Getting started" infile outdir prefix
 
@@ -35,19 +39,22 @@ gpm2 = GPmodel2(grouped_bugs, grouped_diet, grouped_tps, pids)
 
 @info "Writing outputs"
 
-l2b = log2bayes(r2, r1)
-
-bayesfile = joinpath(outdir, prrefix*"_log2bayes.txt")
-write(bayesfile, string(l2b)*'\n')
+open(joinpath(outdir, prefix*"_log2bayes.txt"), "w") do io
+    l2b, lp2, lp1 = log2bayes(r2, r1)
+    println(io, "Log2 bayes: ", l2b)
+    println(io, "Log(p) without diet: ", lp1)
+    println(io, "Log(p) with diet: ", lp2)
+end
 
 result_df = DataFrame()
 result_df.model1_lp = r1[:lp][chain=1] |> collect
-result_df.model1_σ2 = r1[:σ2][chain=1] |> collect
-result_df.model1_c = r1[:c][chain=1] |> collect 
+result_df.model1_σ2 = r1[:sigma][chain=1] |> collect
+
 result_df.model2_lp = r2[:lp][chain=1] |> collect
-result_df.model2_σ2 = r2[:σ2][chain=1] |> collect
+result_df.model2_σ2 = r2[:sigma][chain=1] |> collect
+result_df.model2_c = r2[:c][chain=1] |> collect
+result_df.model2_m = r2[:m][chain=1] |> collect 
 
-result_df.model2_lp
-
-result_file = joinpath(outdir, prefix*"_results.csv")
-CSV.write(result_file, result_df)
+CSV.write(joinpath(outdir, prefix*"_results.csv"), result_df)
+CSV.write(joinpath(outdir, prefix*"_model1.csv"), DataFrame(r1)) # no diet
+CSV.write(joinpath(outdir, prefix*"_model2.csv"), DataFrame(r2)) # with diet
