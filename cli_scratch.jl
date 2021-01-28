@@ -16,27 +16,28 @@ df = CSV.read(infile, DataFrame)
 df = df[completecases(df), :]
 pidmap = Dict(p=>i for (i,p) in enumerate(unique(df.PersonID)))
 df.pid = [pidmap[p] for p in df.PersonID]
-
-df.datemod = [d+rand(Normal(0, 0.2)) for d in df.Date]
-df.bugmod = [b+rand(Normal(0, 0.2)) for b in df.bug]
-
-scorr = subjectcorrmat(df.pid)
+sort!(df, :pid)
+dfg = groupby(df, :pid)
+grouped_bugs = [grp.bug for grp in dfg]
+grouped_tps = [grp.Date for grp in dfg]
+grouped_diet = [grp.nutrient for grp in dfg]
+pids = unique(df.pid)
 
 @info "Sampling from first model"
 
-gpm1 = GPmodel1(df.bugmod, df.nutrient, scorr, df.datemod)
-r1 = sample(gpm1, HMC(0.1,20), 100)
+gpm1 = GPmodel1(grouped_bugs, grouped_tps, pids)
+@time r1 = sample(gpm1, HMC(0.1,20), 100)
 
 @info "Sampling from second model"
 
-gpm2 = GPmodel2(df.bugmod, scorr, df.datemod)
-r2 = sample(gpm2, HMC(0.1,20), 100);
+gpm2 = GPmodel2(grouped_bugs, grouped_diet, grouped_tps, pids)
+@time r2 = sample(gpm2, HMC(0.1,20), 100)
 
 @info "Writing outputs"
 
-l2b = log2bayes(r1, r2)
+l2b = log2bayes(r2, r1)
 
-bayesfile = joinpath(outdir, prefix*"_log2bayes.txt")
+bayesfile = joinpath(outdir, prrefix*"_log2bayes.txt")
 write(bayesfile, string(l2b)*'\n')
 
 result_df = DataFrame()
