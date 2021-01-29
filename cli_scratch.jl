@@ -7,7 +7,7 @@ include("dietmodels.jl")
 infile = ARGS[1]
 outdir = ARGS[2]
 prefix = ARGS[3]
-chain_length = ARGS[4]
+chain_length = parse(Int, ARGS[4])
 # pairid = 3206
 # infile = "test/testin/input_pair_$pairid.tsv"
 # outdir = "test/testout/"
