@@ -7,6 +7,7 @@ include("dietmodels.jl")
 infile = ARGS[1]
 outdir = ARGS[2]
 prefix = ARGS[3]
+chain_length = ARGS[4]
 # pairid = 3206
 # infile = "test/testin/input_pair_$pairid.tsv"
 # outdir = "test/testout/"
@@ -30,12 +31,12 @@ pids = unique(df.pid)
 @info "Sampling from first model"
 
 gpm1 = GPmodel1(grouped_bugs, grouped_tps, pids)
-@time r1 = sample(gpm1, HMC(0.1,20), 100)
+@time r1 = sample(gpm1, HMC(0.1,20), chain_length)
 
 @info "Sampling from second model"
 
 gpm2 = GPmodel2(grouped_bugs, grouped_diet, grouped_tps, pids)
-@time r2 = sample(gpm2, HMC(0.1,20), 100)
+@time r2 = sample(gpm2, HMC(0.1,20), chain_length)
 
 @info "Writing outputs"
 
