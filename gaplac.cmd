@@ -1,1 +1,1 @@
-@julia ./cli/main.jl %*
+@julia --project=@. ./bin/main.jl %*

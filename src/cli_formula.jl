@@ -20,3 +20,11 @@ function _cli_formula_parse(formula::AbstractString)
 
     return response, lik, gp
 end
+
+function _cli_run_sample(args)
+    @debug "running 'sample'" 
+    (response, lik, gp) = _cli_formula_parse(args["formula"])
+    @debug response
+    @debug lik
+    @debug gp
+end

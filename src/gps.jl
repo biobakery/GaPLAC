@@ -26,3 +26,6 @@ end
 struct Cat <: GPCompnent
     symbol::Symbol
 end
+
+Base.+(c1::GPCompnent, c2::GPCompnent) = (:add, c1, c2)
+Base.*(c1::GPCompnent, c2::GPCompnent) = (:multiply, c1, c2)
