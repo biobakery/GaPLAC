@@ -1,7 +1,7 @@
 
 # Guide
 
-[![Build Status](https://github.com/kescobo/gptool.jl/workflows/CI/badge.svg)](https://github.com/kescobo/gptool.jl/actions)
+[![Build Status](https://github.com/biobakery/gptool.jl/workflows/CI/badge.svg)](https://github.com/biobakery/gptool.jl/actions)
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://kescobo.github.io/gptool.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://kescobo.github.io/gptool.jl/dev)
 
@@ -26,7 +26,7 @@ GaPLAC has five main commands to work with: `sample`, `mcmc`, `select`, `predict
 Run the following command from the GaPLAC root folder:
 
 ```
-./gaplac sample "y :~| SExp(x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
+./gaplac sample "y :~| SExp(:x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
 ```
 
 This may take a few minutes the first time, since Julia must compile all the packages. It will produce a large amount of output to the console, and should also produce a plot in `gp_sample.png` which resembles:

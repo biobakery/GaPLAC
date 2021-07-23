@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(normpath(joinpath(@__DIR__, "..")))
 Pkg.instantiate()
 
-using GPTool
+using GaPLAC
 using ArgParse
 
 

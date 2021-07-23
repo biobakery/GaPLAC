@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = GPTool
+CurrentModule = GaPLAC
 ```
 
-# GPTool
+# GaPLAC
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [GPTool]
+Modules = [GaPLAC]
 ```
