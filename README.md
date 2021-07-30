@@ -11,7 +11,7 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 
 1. Install [Julia](https://julialang.org/).
 
-2. Download GaPLAC's repository and unpack it somewhere.
+2. Download GaPLAC's repository and unpack it s omewhere.
 
 3. Open a console in GaPLAC's root folder and run `julia`.
 
@@ -46,7 +46,7 @@ Try changing the lengthscale of the `SExp` term. How does this affect the functi
 Now let's generate a smaller set of data at some randomly chosen `x` coordinates, and store the results in a file instead of printing to stdout:
 
 ```
-./gaplac sample "y :~| SExp(x; l=1.5)" --at "i=1:50;x=Uniform(-5,5)" --output data.tsv
+./gaplac sample "y :~| SExp(x; l=1.5)" --at "x = rand(Uniform(-5,5), 50)" --output data.tsv
 ```
 
 Look at the contents of `data.tsv`. It should contain two columns: `x` and `y`, and the rows are not sorted in any way. We will use this data for the next command.

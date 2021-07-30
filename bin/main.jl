@@ -1,7 +1,7 @@
 using GaPLAC
 using ArgParse
 using LoggingExtras
-
+using TerminalLoggers
 
 function parse_cmdline()
     s = ArgParseSettings()
@@ -45,6 +45,22 @@ end
             required = true
         "--plot"
             help = "File to plot to"
+        "--output", "-o"
+            help = "Table output of GP sample - must end with '.csv' or '.tsv'"
+    end
+
+    @add_arg_table! s["mcmc"] begin
+        "formula"
+            help = "GP formula specification"
+            required = true
+        "--data", "-i"
+            required = true
+            help = """
+                Table input on which to run inference.
+                Must contain columns that correspond to values in 'formula'x
+                """
+        "--plot"
+            help = "File to plot to"
     end
 
     return parse_args(s)
@@ -55,7 +71,7 @@ end
 args = parse_cmdline()
 
 function setup_logs!(loglevel, logpath; dryrun=false)
-    glog = SimpleLogger(stderr, loglevel)
+    glog = TerminalLogger(stderr, loglevel)
     if logpath === nothing || dryrun
         global_logger(glog)
     else
@@ -81,8 +97,9 @@ setup_logs!(loglevel, args["log"])
 
 
 args["%COMMAND%"] == "sample" && GaPLAC._cli_run_sample(args["sample"])
+args["%COMMAND%"] == "mcmc" && GaPLAC._cli_run_mcmc(args["mcmc"])
 
-
+nothing
 # # Redirect logging to a file if necessary
 # loglevel = args["debug"] ? Logging.Debug : Logging.Info
 # if !isa(args["log"], Nothing)
