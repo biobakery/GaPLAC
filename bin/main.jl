@@ -59,6 +59,8 @@ end
                 Table input on which to run inference.
                 Must contain columns that correspond to values in 'formula'x
                 """
+        "--output", "-o"
+            help = "Table to output sampling chaing"
         "--plot"
             help = "File to plot to"
     end

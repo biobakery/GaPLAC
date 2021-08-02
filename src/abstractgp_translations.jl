@@ -5,7 +5,8 @@ _default_range(::LinearKernel)        = -3:0.1:3
 _default_range(::CategoricalKernel)   = [1,2,3]
 
 
-_convert2kernel(k::SExp) = SqExponentialKernel() ∘ ScaleTransform(k.lengthscale)
+
+_convert2kernel(k::SExp) = with_lengthscale(SqExponentialKernel(), k.lengthscale)
 _convert2kernel(k::Linear) = LinearKernel(c=k.intercept)
 _convert2kernel(::Cat) = CategoricalKernel()
 
@@ -14,7 +15,7 @@ _convert2kernel(gpc::Kernel, pos) = _convert2kernel(gpc) ∘ SelectTransform(pos
 
 _walk_kernel(ks::Union{KernelTensorProduct, KernelSum}) = reduce(vcat, [_walk_kernel(k) for k in ks.kernels])
 _walk_kernel(ks::TransformedKernel) = _walk_kernel(ks.kernel)
-_walk_kernel(k::KernelFunctions.SimpleKernel) = k
+_walk_kernel(k::KernelFunctions.SimpleKernel) = [k]
 
 function _formula_pull_varnames(c::GPCompnent)
     return varname(c)

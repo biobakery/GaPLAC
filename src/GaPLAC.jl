@@ -7,6 +7,7 @@ using Distributions
 using CSV
 using DataFrames
 using CairoMakie
+using Turing
 
 include("gps.jl")
 include("liklihoods.jl")
