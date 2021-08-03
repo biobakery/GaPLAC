@@ -1,3 +1,3 @@
 #!/usr/bin/sh
 
-julia --project=@. --color=yes ./bin/main.jl "$@"
+julia --startup-file=no -t auto --project=@. --color=yes ./bin/main.jl "$@"

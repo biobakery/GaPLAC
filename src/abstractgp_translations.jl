@@ -4,7 +4,9 @@ _default_range(::SqExponentialKernel) = 1:10
 _default_range(::LinearKernel)        = -3:0.1:3
 _default_range(::CategoricalKernel)   = [1,2,3]
 
-
+_hyperparam(::SqExponentialKernel) = :lengthscale
+_hyperparam(::LinearKernel) = :intercept
+_hyperparam(::CategoricalKernel) = :nothing
 
 _convert2kernel(k::SExp) = with_lengthscale(SqExponentialKernel(), k.lengthscale)
 _convert2kernel(k::Linear) = LinearKernel(c=k.intercept)
@@ -46,7 +48,7 @@ _convert2eq(op::Symbol, c1::Tuple, c2::Kernel) = _convertop(op)(_covert2g(c1...)
 _convert2eq(op::Symbol, c1::Kernel, c2::Kernel) = _convertop(op)(c1, c2)
 _convert2eq(c::GPCompnent) = _convert2kernel(c)
 
-function _apply_vars(formula::Tuple)
+function _apply_vars(formula::Tuple; hyperparams=nothing)
     vars = _formula_pull_varnames(formula)
     ks = _convert2eq(formula...)
     retkernel = nothing
@@ -59,12 +61,13 @@ function _apply_vars(formula::Tuple)
             retkernel = isnothing(retkernel) ? kernel : retkernel + kernel
             current_k += length(k.kernels) 
             counter += 1
-        elseif k isa KernelFunctions.SimpleKernel
+        elseif k isa KernelFunctions.SimpleKernel || k isa KernelFunctions.TransformedKernel
             kernel = k ∘ SelectTransform([current_k])
             retkernel = isnothing(retkernel) ? kernel : retkernel + kernel
             current_k += 1
             counter += 1
         else
+            @show typeof(k)
             error()
         end
     end

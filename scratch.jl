@@ -1,5 +1,5 @@
-using AbstractGPs: length
-using KernelFunctions: Distances, length
+using AbstractGPs
+using KernelFunctions
 using GaPLAC
 using CairoMakie
 using AbstractGPs
@@ -33,45 +33,108 @@ scatter!(ax3, data.DateOffset, data.nutrient)
 
 fig
 
-k = Matern52Kernel()
-gp = GP(k)
+##
 
-fx = gp(df.bug, 0.01)
-logpdf(fx, df.nutrient)
+k_t = with_lengthscale(SqExponentialKernel(), 10)
+k_sub = CategoricalKernel()
+k_nutrient = LinearKernel()
 
-p_fx = posterior(fx, df.nutrient)
+k1 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) + k_nutrient ∘ SelectTransform([3]) # Collect all the kernels to make them act dimension wise
+k2 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) # kernel without diet variable
 
-plot!(ax1, -1:0.1:3, p_fx; bandscale=3, color=(:blue, 0.3))
-fig
-
-
-param_1, param_2, param_3, param_4, noise = ones(5)
-
-k_nutrient = LinearKernel() ∘ ScaleTransform(param_1) # kernel for nutrient
-# k_obese = transform(LinearKernel(), param_2) # kernel for obese
-k_t = SqExponentialKernel() ∘ ScaleTransform(param_3) # kernel for time
-k_sub = CategoricalKernel() ∘ ScaleTransform(param_4) # kernel for subject
-
-k = k_nutrient ⊗ k_t ⊗ k_sub # Collect all the kernels to make them act dimension wise
 # Here we create a the prior based on the kernel and the data
-priorgp = AbstractGPs.FiniteGP(GP(k), hcat(data.nutrient, data.DateOffset, data.PersonID) , noise, obsdim = 1) # Not sure about the dimensionality here
+priorgp1 = AbstractGPs.FiniteGP(GP(k1), hcat(data.DateOffset, data.PersonID, data.nutrient), 1, obsdim = 1)
+priorgp2 = AbstractGPs.FiniteGP(GP(k2), hcat(data.DateOffset, data.PersonID), 1, obsdim = 1)
+
+
 # We finally compute the posterior given the y observations
-posteriorgp = posterior(priorgp, data.bug)
 
-logpdf(priorgp, data.bug)
-
-k2 = k_t ⊗ k_sub
-priorgp2 = AbstractGPs.FiniteGP(GP(k2), hcat(data.DateOffset, data.PersonID) , noise, obsdim = 1) # Not sure about the dimensionality here
+posteriorgp1 = posterior(priorgp1, data.bug)
 posteriorgp2 = posterior(priorgp2, data.bug)
 
-logpdf(priorgp2, data.bug)
+p1 = logpdf(priorgp1, data.bug)
+p2 = logpdf(priorgp2, data.bug)
 
-logpdf(posteriorgp(hcat(data.nutrient, data.DateOffset, data.PersonID), obsdim=1), data.bug)
+p1 - p2
+
+
+##
+
+person_refs = rand(unique(data.PersonID), 10)
+dfs = [filter(:PersonID=> ==(p), data) for p in person_refs]
+ids = findall(df-> nrow(df) >=3, dfs)
+person_refs = person_refs[ids]
+dfs = dfs[ids]
+
+dates = range((extrema(data.DateOffset) .+ (-5, 5))..., length = 40)
+
+fig = Figure(resolution=(800,1500));
+
+for (i,p) in enumerate(person_refs)
+    testgrid1 = GaPLAC._make_test_rows(dates, [p], dfs[i].nutrient)
+    testgrid2 = GaPLAC._make_test_rows(dates, [p])
+
+    ax1 = Axis(fig[i, 1], title = "PersonID $p, with diet", xlabel="Date (offset)", ylabel="bug")
+    ax2 = Axis(fig[i, 2], title = "PersonID $p, no diet", xlabel="Date (offset)", ylabel="bug")
+    
+    ym1, yvar1 = mean_and_var(posteriorgp1, testgrid1)
+    ym2, yvar2 = mean_and_var(posteriorgp2, testgrid2)
+
+    n = nrow(dfs[i])
+    l = length(dates)
+
+    for d in 1:n
+        idx = (1 + (d-1) * l):d*l
+        scatter!(ax1, dates, ym1[idx])
+        band!(ax1, dates, ym1[idx] .- yvar1[idx], ym1[idx] .+ yvar1[idx], color = (:gray, 0.2))
+    end
+
+
+    scatter!(ax2, dates, ym2, color=:dodgerblue)
+    scatter!(ax2, dfs[i].DateOffset, dfs[i].bug, color=:red)
+    band!(ax2, dates, ym2 .- yvar2, ym2 .+ yvar2, color=(:dodgerblue, 0.3))
+end
+
+fig
+
+##
+
+data = CSV.read("test/testin/input_pair_109.tsv", DataFrame)
+filter!(:Date=> !ismissing, data)
+data.Date = disallowmissing(data.Date)
+gdf = groupby(data, :PersonID)
+
+# Give each subject a random offset from 0
+data = transform(gdf, :Date=> (d-> d .- minimum(d) .+ rand()) => :DateOffset)
+
+k_t = with_lengthscale(SqExponentialKernel(), 0.5)
+k_sub = CategoricalKernel()
+k_nutrient = LinearKernel()
+
+k1 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) + k_nutrient ∘ SelectTransform([3]) # Collect all the kernels to make them act dimension wise
+k2 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) # kernel without diet variable
+
+# Here we create a the prior based on the kernel and the data
+priorgp1 = AbstractGPs.FiniteGP(GP(k1), hcat(data.DateOffset, data.PersonID, data.nutrient), 1, obsdim = 1)
+priorgp2 = AbstractGPs.FiniteGP(GP(k2), hcat(data.DateOffset, data.PersonID), 1, obsdim = 1)
+
+
+# We finally compute the posterior given the y observations
+
+posteriorgp1 = posterior(priorgp1, data.bug)
+posteriorgp2 = posterior(priorgp2, data.bug)
+
+p1 = logpdf(priorgp1, data.bug)
+p2 = logpdf(priorgp2, data.bug)
+
+p1 - p2
+
+##
 
 using StatsBase
 
 
-mc = mean_and_cov(posteriorgp, RowVecs(hcat(data.nutrient, data.DateOffset, data.PersonID)))
+mc = mean_and_cov(posteriorgp, RowVecs(hcat(data.PersonID, data.DateOffset, data.nutrient)))
 
 ## Example for zulip
 

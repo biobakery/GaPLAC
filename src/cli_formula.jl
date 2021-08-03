@@ -32,10 +32,6 @@ function _df_output(df, args)
     end
 end
 
-function _make_test_df(args...; vars)
-    DataFrame(permutedims(reshape(collect(Iterators.flatten(reduce(vcat, Iterators.product(args...)))),
-        length(args), *(length.(args)...))), vars)
-end
 
 function _cli_run_sample(args)
     @info "running 'sample'" 
@@ -123,13 +119,12 @@ function _cli_run_mcmc(args)
     
     y = df[!, response]
     x = Matrix(df[!, vars])
-    
 
     @debug "GP equation" eq 
     @debug "Model variables" vars
 
-    Turing.@model function inference_engine(Y, X, ks)
-        ℓ ~ TruncatedNormal(1,1,0,5) # no idea if this is appropriate prior
+    @model function inference_engine(Y, X, ks)
+        ℓ ~ Uniform(0,100) # no idea if this is appropriate prior
         σ ~ TruncatedNormal(1,1,0,5) # no idea if this is appropriate prior
         
         k = σ * with_lengthscale(first(ks), ℓ)
@@ -140,7 +135,7 @@ function _cli_run_mcmc(args)
         Y .~ Normal.(fx, σ)
     end
 
-    chain = sample(inference_engine(x, y, eq), NUTS(0.65), 200)
+    chain = sample(inference_engine(x, y, eq), NUTS(0.65), 200, progress=true)
     _df_output(chain, args)
 
     @info chain

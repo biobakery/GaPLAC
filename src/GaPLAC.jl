@@ -13,5 +13,6 @@ include("gps.jl")
 include("liklihoods.jl")
 include("abstractgp_translations.jl")
 include("cli_formula.jl")
+include("utils.jl")
 
 end # module
