@@ -11,3 +11,9 @@ function _make_test_rows(args...)
     RowVecs(_make_test_grid(args...))
 end
 
+
+function invnormaltransform(v; μ=0, σ=1, c=3/8)
+    rank = invperm(sortperm(v))
+    N = length(v)
+    return [norminvcdf(μ, σ, (x - c) / (N - 2c + 1)) for x in rank]
+end

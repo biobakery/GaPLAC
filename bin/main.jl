@@ -60,7 +60,11 @@ end
                 Must contain columns that correspond to values in 'formula'x
                 """
         "--output", "-o"
-            help = "Table to output sampling chaing"
+            help = "Table to output sampling chain"
+        "--infer"
+            help = "Which model hyperparameter to infer"
+            default = "lengthscale"
+            nargs = '+'
         "--plot"
             help = "File to plot to"
     end

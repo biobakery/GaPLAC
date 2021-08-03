@@ -10,14 +10,13 @@ This guide is intended to provide an overview of the basic workflow using GaPLAC
 ## Installation
 
 1. Install [Julia](https://julialang.org/).
+2. Download GaPLAC's repository and unpack it somewhere.
+3. Open a console in GaPLAC's root folder and run 
+   ```
+   $ julia --project=@. -e 'using Pkg; Pkg.instantiate()'`
 
-2. Download GaPLAC's repository and unpack it s omewhere.
-
-3. Open a console in GaPLAC's root folder and run `julia`.
-
-4. At the Julia prompt, press `]` to access the package manager's prompt, then enter `activate .`, and `instantiate`. This will install the required packages and may take a few minutes. Once complete, use backspace to get back to the normal Julia prompt, and run `exit()` to quit Julia.
-
-5. If on Mac/UNIX, to use `./gaplac ...` format, you may need to run `chmod u+x ./gaplac`.
+   This will install the required packages and may take a few minutes.
+4. If on Mac/UNIX, to use `./gaplac ...` format, you may need to run `chmod u+x ./gaplac`.
 
 ## Generating some sample data
 
@@ -37,7 +36,7 @@ If instead you get an error mentioning missing dependencies, it means that step 
 
 Let's look at each of the pieces of the command:
 
-- `"y :~| SExp(x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (described later) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
+- `"y :~| SExp(:x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (described later) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
 - `--at "x=-5:0.1:5"`: This tells GaPLAC what values of `x` to sample the GP at.
 - `--plot gp_sample.png`: Plot the dynamics here.
 
@@ -46,7 +45,7 @@ Try changing the lengthscale of the `SExp` term. How does this affect the functi
 Now let's generate a smaller set of data at some randomly chosen `x` coordinates, and store the results in a file instead of printing to stdout:
 
 ```
-./gaplac sample "y :~| SExp(x; l=1.5)" --at "x = rand(Uniform(-5,5), 50)" --output data.tsv
+./gaplac sample "y :~| SExp(:x; l=1.5)" --at "x = rand(Uniform(-5,5), 50)" --output data.tsv
 ```
 
 Look at the contents of `data.tsv`. It should contain two columns: `x` and `y`, and the rows are not sorted in any way. We will use this data for the next command.

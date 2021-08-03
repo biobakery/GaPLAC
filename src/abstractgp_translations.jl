@@ -4,13 +4,18 @@ _default_range(::SqExponentialKernel) = 1:10
 _default_range(::LinearKernel)        = -3:0.1:3
 _default_range(::CategoricalKernel)   = [1,2,3]
 
+
 _hyperparam(::SqExponentialKernel) = :lengthscale
 _hyperparam(::LinearKernel) = :intercept
 _hyperparam(::CategoricalKernel) = :nothing
 
-_convert2kernel(k::SExp) = with_lengthscale(SqExponentialKernel(), k.lengthscale)
+
+_convert2kernel(k::SExp) = k.lengthscale == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), k.lengthscale)
 _convert2kernel(k::Linear) = LinearKernel(c=k.intercept)
 _convert2kernel(::Cat) = CategoricalKernel()
+
+_convert2kernel(::SExp, l) = l == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), l)
+_convert2kernel(::Linear, c) = LinearKernel(; c)
 
 _convert2kernel(gpc::GPCompnent, pos) = _convert2kernel(gpc) ∘ SelectTransform(pos)
 _convert2kernel(gpc::Kernel, pos) = _convert2kernel(gpc) ∘ SelectTransform(pos)
@@ -48,7 +53,7 @@ _convert2eq(op::Symbol, c1::Tuple, c2::Kernel) = _convertop(op)(_covert2g(c1...)
 _convert2eq(op::Symbol, c1::Kernel, c2::Kernel) = _convertop(op)(c1, c2)
 _convert2eq(c::GPCompnent) = _convert2kernel(c)
 
-function _apply_vars(formula::Tuple; hyperparams=nothing)
+function _apply_vars(formula::Tuple)
     vars = _formula_pull_varnames(formula)
     ks = _convert2eq(formula...)
     retkernel = nothing
@@ -75,3 +80,15 @@ function _apply_vars(formula::Tuple; hyperparams=nothing)
 end
 
 _apply_vars(formula::GPCompnent) = (_convert2kernel(formula), [_formula_pull_varnames(formula)])
+
+function _apply_hyper(formula::Tuple, hyperparams=Dict())
+    vars = _formula_pull_varnames(formula)
+    op, c1, c12 = formula
+    
+
+end
+
+function _apply_hyper(gpc::GPCompnent, hyperparams=Dict())
+    hp = get(hyperparams, varname(gpc), _default_hyper(gpc))
+    return _apply_hyper(gpc, hp)
+end
