@@ -35,12 +35,15 @@ fig
 
 ##
 
-k_t = with_lengthscale(SqExponentialKernel(), 10)
+k_t = with_lengthscale(SqExponentialKernel(), 1)
 k_sub = CategoricalKernel()
 k_nutrient = LinearKernel()
 
 k1 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) + k_nutrient ∘ SelectTransform([3]) # Collect all the kernels to make them act dimension wise
 k2 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) # kernel without diet variable
+
+# k1 = ((k_t ∘ SelectTransform([1])) ⊗ (k_sub ∘ SelectTransform([2]))) + k_nutrient ∘ SelectTransform([3]) # Collect all the kernels to make them act dimension wise
+# k2 = (k_t ⊗ k_sub) ∘ SelectTransform([1,2]) # kernel without diet variable
 
 # Here we create a the prior based on the kernel and the data
 priorgp1 = AbstractGPs.FiniteGP(GP(k1), hcat(data.DateOffset, data.PersonID, data.nutrient), 1, obsdim = 1)
@@ -313,3 +316,22 @@ testt = range(20,40, length=100)
 refx = 0
 testgrid = ColVecs(reduce(hcat, vcat.(testt, refx)))
 ym1, yvar1 = mean_and_var(gppost, testgrid)
+
+##
+
+using Distributions
+
+x1 = 1:20
+x2 = randn(20)
+
+k1 = SqExponentialKernel()
+k2 = LinearKernel()
+
+K = (k1 ⊗ k2) ∘ SelectTransform([1,2])
+pr1 = AbstractGPs.FiniteGP(GP(K), hcat(x1,x2), obsdim=1)
+rand(pr1)
+
+K = (k1 ∘ SelectTransform(1)) ⊗ (k2 ∘ SelectTransform(2))
+pr2 = AbstractGPs.FiniteGP(GP(K), hcat(x1,x2), obsdim=1)
+rand(pr2)
+

@@ -38,19 +38,26 @@ args["output"] = "mcmc_sexp_lin.tsv"
 (response, lik, gp_form) = GaPLAC._cli_formula_parse(args["formula"])
 
 gp_form
+GaPLAC._convert2eq(gp_form; hyperparams=Dict(:x=> 2))
+
+l = 2
 
 df = CSV.read(args["data"], DataFrame)
 
-eq, vars = GaPLAC._apply_vars(gp_form)
+eq, vars = GaPLAC._apply_vars(gp_form, hyperparams=Dict(:x=>2))
 kernels = GaPLAC._walk_kernel(eq)
 hyper = GaPLAC._hyperparam.(kernels)
+
+
+eq
 
 y = df[!, response]
 x = Matrix(df[!, vars])
 
-k = GaPLAC.CategoricalKernel() * SqExponentialKernel()
+k = GaPLAC.CategoricalKernel() ⊗ SqExponentialKernel()
 k2 = with_lengthscale(k, 2)
-k3 = GaPLAC.CategoricalKernel() * with_lengthscale(SqExponentialKernel(), 2)
+
+
 
 # GaPLAC._cli_run_mcmc(args)
 
@@ -71,3 +78,53 @@ x = rand(Beta(1,3), 1000); y = invnormaltransform(x);
 hist(x)
 hist!(y)
 current_figure()
+
+
+##
+
+mutable struct Leaf
+    name
+end
+
+mutable struct Node
+    nodes
+    properties
+end
+
+tree = (:join, 
+    (:split,
+        "l1",
+        (:join, 
+            "l2",
+            "l3"
+        )
+    ),
+    (:split,
+        "l4",
+        "l5"
+    )
+)
+
+props = ["a", "b", "c", "d", "e"]
+
+solution = [
+    Node([Node([Leaf("l1")], ["a"]),
+          Node([Leaf("l2"), Leaf("l3")], ["b", "c"]),
+          ], ["a", "b", "c"]),
+    Node([Node([Leaf("l4")], ["d"]),
+          Node([Leaf("l5")], ["e"])
+          ], ["d", "e"])
+]
+
+
+nested_length(t) = 1
+nested_length(t::Tuple) = nested_length(t[2]) + nested_length(t[3])
+nested_length(t::Tuple{T}) where T <: Kernel = nested_length.(t.kernels)
+nested_length(t::KernelFunctions.TransformedKernel) = nested_length(t.kernel)
+nested_length(t::KernelFunctions.KernelTensorProduct) = sum(nested_length.(t.kernels))
+nested_length(t::KernelFunctions.KernelSum) = sum(nested_length.(t.kernels))
+
+
+nested_length.(eq.kernels)
+nested_length.(eq.kernels[1])
+nested_length(tree)

@@ -1,4 +1,3 @@
-
 function _cli_run_mcmc(args)
     @info "running 'mcmc'" 
     (response, lik, gp_form) = _cli_formula_parse(args["formula"])
@@ -16,9 +15,8 @@ function _cli_run_mcmc(args)
     @debug "GP equation" eq 
     @debug "Model variables" vars
 
+
     @model function inference_engine(Y, X, ks)
-        ℓ ~ Uniform(0,20) # no idea if this is appropriate prior
-        σ ~ TruncatedNormal(1,1,0,5) # no idea if this is appropriate prior
         
         k = σ * with_lengthscale(first(ks), ℓ)
         
