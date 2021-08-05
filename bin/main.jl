@@ -74,20 +74,27 @@ function parse_cmdline()
     end
 
     @add_arg_table! s["select"] begin
-        "formula1"
-            help = "GP formula specification 1"
-            required = true
-        "formula2"
-            help = "GP formula specification 2"
-            required = true
+        "--formulae"
+            help = """
+                Compare 2 GP formula specifications, requires '--data' as well.
+                Result will be logpdf of formula 2 - logpdf of formula 1.
+
+                A positive value indicates more evidence for formula 2.
+                """
+            nargs = 2
+        "--chains"
+            help = """
+                Compare 2 sampling chains from 'mcmc' command.
+                Result will be the log2 bayes factor.
+
+                A positive value indicates more evidence for chain 1.
+                """
+            nargs = 2
         "--data", "-i"
-            required = true
             help = """
                 Table input on which to run inference.
-                Must contain columns that correspond to values in 'formula'
+                Must contain columns that correspond to values in both 'formulae'
                 """
-        "--output", "-o"
-            help = "Table to output sampling chain"
         "--plot"
             help = "File to plot to"
     end
@@ -127,6 +134,7 @@ setup_logs!(loglevel, args["log"])
 
 args["%COMMAND%"] == "sample" && GaPLAC._cli_run_sample(args["sample"])
 args["%COMMAND%"] == "mcmc" && GaPLAC._cli_run_mcmc(args["mcmc"])
+args["%COMMAND%"] == "select" && GaPLAC._cli_run_select(args["select"])
 
 nothing
 # # Redirect logging to a file if necessary

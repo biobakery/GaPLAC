@@ -1,5 +1,7 @@
 module GaPLAC
 
+export invnormaltransform
+
 using AbstractGPs
 using KernelFunctions
 using Distances
@@ -10,6 +12,7 @@ using CairoMakie
 using Turing
 using Turing: Variational
 using StatsFuns
+using StatsBase
 using Flux
 
 include("gps.jl")
