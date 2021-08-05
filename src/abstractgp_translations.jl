@@ -68,4 +68,4 @@ function _apply_vars(formula::Tuple; hyperparams=Dict())
     return retkernel, vars
 end
 
-_apply_vars(formula::GPCompnent) = (_convert2kernel(formula), [_formula_pull_varnames(formula)])
+_apply_vars(formula::GPCompnent; hyperparams=Dict()) = (_convert2eq(formula; hyperparams), [_formula_pull_varnames(formula)])

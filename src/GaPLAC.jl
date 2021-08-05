@@ -18,7 +18,8 @@ include("abstractgp_translations.jl")
 include("utils.jl")
 
 include("cli/formula.jl")
+include("cli/sample.jl")
 include("cli/mcmc.jl")
-include("cli/formula.jl")
+include("cli/select.jl")
 
 end # module

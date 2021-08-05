@@ -34,7 +34,7 @@ function parse_cmdline()
         "--log"
             help = "Log to a file as well as stdout"
 
-end
+    end
 
     @add_arg_table! s["sample"] begin
         "formula"
@@ -57,17 +57,41 @@ end
             required = true
             help = """
                 Table input on which to run inference.
-                Must contain columns that correspond to values in 'formula'x
+                Must contain columns that correspond to values in 'formula'
                 """
+        "--infer"
+            help = """
+                Which model hyperparameter to infer.
+                Specify variable names, the hyperparameter(s) will be determined
+                based on kernel type (eg length scale for SExp)
+                """
+            nargs = '+'
+            required = true
         "--output", "-o"
             help = "Table to output sampling chain"
-        "--infer"
-            help = "Which model hyperparameter to infer"
-            default = "lengthscale"
-            nargs = '+'
         "--plot"
             help = "File to plot to"
     end
+
+    @add_arg_table! s["select"] begin
+        "formula1"
+            help = "GP formula specification 1"
+            required = true
+        "formula2"
+            help = "GP formula specification 2"
+            required = true
+        "--data", "-i"
+            required = true
+            help = """
+                Table input on which to run inference.
+                Must contain columns that correspond to values in 'formula'
+                """
+        "--output", "-o"
+            help = "Table to output sampling chain"
+        "--plot"
+            help = "File to plot to"
+    end
+
 
     return parse_args(s)
 end
@@ -100,7 +124,6 @@ else
 end
 
 setup_logs!(loglevel, args["log"])
-
 
 args["%COMMAND%"] == "sample" && GaPLAC._cli_run_sample(args["sample"])
 args["%COMMAND%"] == "mcmc" && GaPLAC._cli_run_mcmc(args["mcmc"])
