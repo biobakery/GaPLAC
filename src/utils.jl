@@ -25,3 +25,14 @@ function invnormaltransform(v; μ=0, σ=1, c=3/8, flattenzeros=true)
     return [norminvcdf(μ, σ, (x - c) / (length(v) - 2c + 1)) for x in rank]
 end
 
+function _df_output(df, args)
+    if !isnothing(args["output"])
+        @info "Writing to $(args["output"])"
+        out = args["output"]
+        delim = endswith(out, "csv") ? ',' :
+              endswith(out, "tsv") ? '\t' : error("--output arg must be '.tsv' or '.csv'")
+        CSV.write(expanduser(args["output"]), df; delim)
+    else
+        @show df
+    end
+end

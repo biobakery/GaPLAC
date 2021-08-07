@@ -30,7 +30,7 @@ function _cli_run_mcmc(args)
     chain = sample(m, NUTS(0.65), 200, progress=true)
     _df_output(chain, args)
 
-    @info chain
+    return chain
 end
 
 function _get_hyperparams(infer, kernels, vars)

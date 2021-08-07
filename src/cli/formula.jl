@@ -20,14 +20,3 @@ function _cli_formula_parse(formula::AbstractString)
 
     return Symbol(response), lik, gp
 end
-
-function _df_output(df, args)
-    if !isnothing(args["output"])
-        out = args["output"]
-        delim = endswith(out, "csv") ? ',' :
-              endswith(out, "tsv") ? '\t' : error("--output arg must be '.tsv' or '.csv'")
-        CSV.write(expanduser(args["output"]), df; delim)
-    else
-        @show df
-    end
-end

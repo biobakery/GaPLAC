@@ -1,15 +1,15 @@
 function _cli_run_select(args)
-    @info "running 'select'" 
+    @info "running 'select'"
+    @info args 
     
-    haskey(args, "chains") && haskey(args, "formulae") && throw(ArgumentError("'select' can only take one of '--formulae' or '--chains', not both"))
+    !isempty(args["chains"]) && !isempty(args["formulae"]) && throw(ArgumentError("'select' can only take one of '--formulae' or '--chains', not both"))
 
-    if haskey(args, "chains")
+    if !isempty(args["chains"])
         lp1 = CSV.read(args["chains"][1], DataFrame)
         lp2 = CSV.read(args["chains"][2], DataFrame)
-
-        @info log2(harmmean(BigFloat(2) ^ x for x in lp1[!, :lp]) /
-                   harmmean(BigFloat(2) ^ x for x in lp2[!, :lp]))
-    elseif haskey(args, "formulae")
+        bayes = log2(harmmean(BigFloat(2) ^ x for x in lp1[!, :lp]) /
+                     harmmean(BigFloat(2) ^ x for x in lp2[!, :lp]))
+    elseif !isempty(args["formulae"])
         (response1, lik1, gp_form1) = _cli_formula_parse(args["formulae"][1])
         (response2, lik2, gp_form2) = _cli_formula_parse(args["formulae"][2])
         
@@ -29,24 +29,33 @@ function _cli_run_select(args)
         @debug "GPs:" gp1 gp2
 
         df = CSV.read(args["data"], DataFrame)
-
-        df1 = unique(df, vars1)
-        df1 = disallowmissing(df1[completecases(df1),:])
-        y1 = df1[!, response1]
-        x1 = Matrix(df1[!, vars1])
+        df = disallowmissing(df[completecases(df),:])
+        
+        y1 = df[!, response1]
+        x1 = Matrix(df[!, vars1])
         pr1 = AbstractGPs.FiniteGP(gp1, x1, 0.1, obsdim=1)    
 
-        df2 = unique(df, vars2)
-        df2 = disallowmissing(df2[completecases(df2),:])
-        y2 = df2[!, response2]
-        x2 = Matrix(df2[!, vars2])
+        y2 = df[!, response2]
+        x2 = Matrix(df[!, vars2])
         pr2 = AbstractGPs.FiniteGP(gp2, x2, 0.1, obsdim=1)    
         
+        lp1 = logpdf(pr1, y1)
+        lp2 = logpdf(pr2, y2)
         pst1 = posterior(pr1, y1)
         pst2 = posterior(pr2, y2)
         
-        @info "Model 1 / Model 2" log2(BigFloat(2)^logpdf(pr2, y2) / BigFloat(2)^logpdf(pr1, y1))
+        bayes = log2(BigFloat(2)^lp1 / BigFloat(2)^lp2)
     else
-        throw(ArgumentError("'select' command requires either '--chains' or 'formulae' arguments"))
+        throw(ArgumentError("'select' command requires either '--chains' or '--formulae' arguments"))
     end
+
+    @info """
+        **Log2 Bayes**: $(round(Float64(bayes), digits=3))
+        
+        - **Log(pdf)** - model 1: $(lp1)
+        - **Log(pdf)** - model 2: $(lp2)
+        
+        _Note_ - Positive values indicate more evidence for model 1
+        """
+
 end

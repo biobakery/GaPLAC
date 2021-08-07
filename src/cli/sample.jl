@@ -1,5 +1,6 @@
 function _cli_run_sample(args)
     @info "running 'sample'" 
+    @info args
     (response, lik, gp_form) = _cli_formula_parse(args["formula"])
     @debug "GP formula" gp_form
         
