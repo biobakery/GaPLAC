@@ -20,7 +20,7 @@ function parse_cmdline()
             help = "Diagnostic plots showing the posteriors of different components of the GP"
             action = :command
         "select"
-            help = "Output model selection parameters; requires --mcmc and --mcmc2"
+            help = "Output model selection parameters"
             action = :command
         "--verbose", "-v"
             help = "Log level to @info"

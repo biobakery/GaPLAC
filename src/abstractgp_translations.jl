@@ -28,7 +28,7 @@ function _convertop(op::Symbol)
     if op == :add
         return +
     elseif op == :multiply
-        return ⊗
+        return *
     else
         throw(ArgumentError("Operation $op not yet supported"))
     end
@@ -40,7 +40,11 @@ _convert2eq(c::GPCompnent; hyperparams=Dict()) = haskey(hyperparams, varname(c))
 
 _convert2eq(op::Symbol, c1::Kernel, c2::Kernel; hyperparams=Dict()) = _convertop(op)(c1, c2)
 
-
+function _apply_select(formula::Tuple; hyperparams=Dict())
+    vars = _formula_pull_varnames(formula)
+    varmap = Dict(var=>i for (i, var) in enumerate(unique(vars)))
+    
+end
 
 function _apply_vars(formula::Tuple; hyperparams=Dict())
     vars = _formula_pull_varnames(formula)
