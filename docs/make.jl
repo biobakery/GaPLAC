@@ -1,8 +1,8 @@
-using GPTool
+using GaPLAC
 using Documenter
 
 makedocs(;
-    modules=[GPTool],
+    modules=[GaPLAC],
     authors="Kevin Bonham, PhD; Jason Lloyde-Price, PhD",
     repo="https://github.com/biobakery/gptool.jl/blob/{commit}{path}#L{line}",
     sitename="gptool.jl",

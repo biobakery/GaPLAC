@@ -1,1 +1,1 @@
-@julia ./cli/main.jl %*
+@julia --startup-file=no -t auto --project=@. ./bin/main.jl %*

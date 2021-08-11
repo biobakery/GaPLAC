@@ -1,4 +1,6 @@
 /docs/build/
+/scratch/
 Manifest.toml
-
+*.csv
+*.tsv
 /test/testout/*
