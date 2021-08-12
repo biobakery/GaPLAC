@@ -1,7 +1,0 @@
-
-lp = log prior
-ll = log likelihood
-lπ = log posterior
-
-θ = transformed parameter vector
-ϕ = unconstrained parameter vector
