@@ -10,8 +10,8 @@ function _cli_run_select(args)
         bayes = log2(harmmean(BigFloat(2) ^ x for x in lp1[!, :lp]) /
                      harmmean(BigFloat(2) ^ x for x in lp2[!, :lp]))
     elseif !isempty(args["formulae"])
-        (response1, lik1, gp_form1) = _cli_formula_parse(args["formulae"][1])
-        (response2, lik2, gp_form2) = _cli_formula_parse(args["formulae"][2])
+        (resp1, lik1, gp_form1) = _cli_formula_parse(args["formulae"][1])
+        (resp2, lik2, gp_form2) = _cli_formula_parse(args["formulae"][2])
         
         @debug "GP formulae" gp_form1 gp_form2
             
@@ -31,11 +31,11 @@ function _cli_run_select(args)
         df = CSV.read(args["data"], DataFrame)
         df = disallowmissing(df[completecases(df),:])
         
-        y1 = df[!, response1]
+        y1 = df[!, resp1]
         x1 = Matrix(df[!, vars1])
         pr1 = AbstractGPs.FiniteGP(gp1, x1, 0.1, obsdim=1)    
 
-        y2 = df[!, response2]
+        y2 = df[!, resp2]
         x2 = Matrix(df[!, vars2])
         pr2 = AbstractGPs.FiniteGP(gp2, x2, 0.1, obsdim=1)    
         

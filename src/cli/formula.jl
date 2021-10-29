@@ -14,10 +14,10 @@ function _cli_formula_parse(formula::AbstractString)
         lik = isempty(lik) ? GaPLAC.Gaussian() : GaPLAC.eval(Meta.parse(lik))
     end
 
-    response = strip(formula[1:prevind(formula, spl1)])
+    resp = strip(formula[1:prevind(formula, spl1)])
     
     gp = strip(formula[nextind(formula, barind):end])
     gp = GaPLAC.eval(Meta.parse(gp))
 
-    return Symbol(response), lik, gp
+    return Symbol(resp), lik, gp
 end

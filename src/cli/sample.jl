@@ -1,7 +1,7 @@
 function _cli_run_sample(args)
     @info "running 'sample'" 
     @info args
-    (response, lik, gp_form) = _cli_formula_parse(args["formula"])
+    (resp, lik, gp_form) = _cli_formula_parse(args["formula"])
     @debug "GP formula" gp_form
         
     eq, vars = _apply_vars(gp_form)
@@ -38,7 +38,7 @@ function _cli_run_sample(args)
     
     df = _make_test_df((atdict[v] for v in vars)...; vars)
     X = RowVecs(Matrix(df))
-    df[!, response] = rand(gp(X, 0.1))
+    df[!, resp] = rand(gp(X, 0.1))
     
     _df_output(df, args)
 
@@ -51,7 +51,7 @@ function _cli_run_sample(args)
         else
             @info "Plotting output"
             x = df[!, first(vars)]
-            y = df[!, response]
+            y = df[!, resp]
             fx = AbstractGPs.FiniteGP(gp, x, 0.1)
             pgp = posterior(fx, y)
             xmin, xmax = extrema(x) .+ (-1, 1)
@@ -60,7 +60,7 @@ function _cli_run_sample(args)
             
             fig, ax, l = scatter(x, y)
             ax.xlabel = string(first(vars))
-            ax.ylabel = string(response)
+            ax.ylabel = string(resp)
             ax.title = "Sample from posterior, x from $xmin to $xmax"
             lines!(xtest, ym, color=:dodgerblue)
             band!(xtest, ym .- yvar, ym .+ yvar, color=(:dodgerblue, 0.3))

@@ -6,10 +6,12 @@ _default_range(::CategoricalKernel)   = [1,2,3]
 
 
 _convert2kernel(k::SExp) = k.lengthscale == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), k.lengthscale)
+_convert2kernel(k::OU) = k.lengthscale == 1 ? ExponentialKernel() : with_lengthscale(ExponentialKernel(), k.lengthscale)
 _convert2kernel(k::Linear) = LinearKernel(c=k.intercept)
 _convert2kernel(::Cat) = CategoricalKernel()
 
 _convert2kernel(::SExp, l) = l == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), l)
+_convert2kernel(::OU, l) = l == 1 ? ExponentialKernel() : with_lengthscale(ExponentialKernel(), l)
 _convert2kernel(::Linear, c) = LinearKernel(; c)
 
 _walk_kernel(ks::Union{KernelTensorProduct, KernelSum}) = reduce(vcat, [_walk_kernel(k) for k in ks.kernels])
