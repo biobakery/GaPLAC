@@ -1,6 +1,6 @@
 function _cli_run_mcmc(args)
     @info "running 'mcmc'" 
-    (response, lik, gp_form) = _cli_formula_parse(args["formula"])
+    (resp, lik, gp_form) = _cli_formula_parse(args["formula"])
     @debug "GP formula" gp_form
         
     df = CSV.read(args["data"], DataFrame)
@@ -10,12 +10,11 @@ function _cli_run_mcmc(args)
     length(vars) == length(kernels) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
     inferable = Symbol.(args["infer"])
 
-    y = df[!, response]
+    y = df[!, resp]
     x = Matrix(df[!, vars])
 
     @debug "GP equation" eq 
     @debug "Model variables" vars
-
 
     @model function inference_engine(Y, X, eq, inferable)
         ℓ ~ TruncatedNormal(1, 5, 0, 30)
@@ -27,7 +26,7 @@ function _cli_run_mcmc(args)
 
     m = inference_engine(y, x, gp_form, inferable)
     
-    chain = sample(m, NUTS(0.65), 200, progress=true)
+    chain = sample(m, NUTS(0.65), args["samples"], progress=true)
     _df_output(chain, args)
 
     return chain

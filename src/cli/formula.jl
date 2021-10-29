@@ -5,8 +5,9 @@ function _cli_formula_parse(formula::AbstractString)
     barind = nextind(formula, spl2)
     formula[barind] == '|' || throw(ArgumentError("Invalid formula specification"))
 
-    if isnothing(spl1)
+    if isnothing(spl1) || spl1 > spl2
         lik = GaPLAC.Gaussian()
+        spl1 = prevind(formula, spl2)
     else
         spl1 < spl2 || throw(ArgumentError("Invalid formula specification"))
         lik = strip(formula[nextind(formula, spl1):prevind(formula, spl2)])

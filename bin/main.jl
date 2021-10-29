@@ -67,6 +67,13 @@ function parse_cmdline()
                 """
             nargs = '+'
             required = true
+        "--samples"
+            help = """
+            Number of samples to take from the chain.
+            Default=200
+            """
+            arg_type=Int
+            default=200
         "--output", "-o"
             help = "Table to output sampling chain"
         "--plot"

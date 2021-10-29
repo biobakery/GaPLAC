@@ -4,3 +4,4 @@ Manifest.toml
 *.csv
 *.tsv
 /test/testout/*
+.envrc

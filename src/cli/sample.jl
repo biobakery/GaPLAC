@@ -23,7 +23,7 @@ function _cli_run_sample(args)
     for expr in exprs
         expr.head == Symbol("=") || error("Only assignments allowed in `--at` argument")
         var = expr.args[1]
-        val = Main.eval(expr.args[2])
+        val = GaPLAC.eval(expr.args[2])
         atdict[var] = val
     end
     

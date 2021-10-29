@@ -58,7 +58,7 @@ We are usually interested in the parameters of the covariance function which bes
 Try running the following command:
 
 ```
-./gaplac mcmc "y ~| SExp(:x)" --data data.tsv --output mcmc.tsv --samples 500
+./gaplac mcmc "y ~| SExp(:x)" --data data.tsv --output mcmc.tsv --samples 500 --infer x
 ```
 
 First, note that the model formula omits the additional `:` before the `~`. This will therefore default to a Gaussian likelihood.
