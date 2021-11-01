@@ -72,13 +72,24 @@ Now examine the output file `mcmc.tsv`. Instead of showing a relationship betwee
 `mcmc` fits a single model, but how do we know it's the right model? Maybe another model would be a better fit? To answer this question, we can run `mcmc` again with the other model. In this case, let's test a different kind of time-varying process called an Ornstein-Uhlenbeck (OU) process:
 
 ```
-./gaplac mcmc "y ~| OU(x)" --data data.tsv --output mcmc_ou.tsv --samples 500
+./gaplac mcmc "y ~| OU(:x)" --data data.tsv --output mcmc_ou.tsv --samples 500
 ```
 
 This will give us a second set of model fit results in a new `mcmc_ou.tsv` file. Now we can use those goodness-of-fit values in each of the files to determine which of the models we believe (hint: we generated data from a Squared-Exponential covariance function, and thus we expect the OU process will perform worse. Let's test that with the `select` command:
 
 ```
 ./gaplac select --chains mcmc.tsv mcmc_ou.tsv
+```
+```
+┌ Info: Log2 Bayes: 8.405
+│
+│   •  Log(pdf) - model 1: -81.29118
+│     
+│
+│   •  Log(pdf) - model 2: -89.69639
+│      9.972996e-28
+│
+└ Note - Positive values indicate more evidence for model 1
 ```
 
 This will compare the log posterior values stored in each of the MCMC chains, and summarize them as a [Bayes Factor](https://en.wikipedia.org/wiki/Bayes_factor), which is reported in log2 scale. Here, log2 Bayes Factors greater than 1 indicate that the first model (in this case the Squared-Exponential) should be preferred, while negative numbers indicate the opposite - that the second model should be preferred.
@@ -87,8 +98,25 @@ You may also compare different forumla parameters on your initial data,
 rather than using the outputs from MCMC.
 
 ```
-./gaplac select --formulae "y ~| SExp(:x, l=2)" "y ~| SExp(:x, l=1)" --data data.tsv
+./gaplac -v select --formulae "y ~| SExp(:x, l=2)" "y ~| SExp(:x, l=1)" --data data.tsv
 ```
+```
+[ Info: running 'select'
+┌ Info:
+│ Dict{String, Any} with 4 entries:
+│   "plot" => nothing
+│   "formulae" => Any["y ~| SExp(:x, l=1.5)", "y ~| OU(:x, l=1.5)"]
+│   "data" => "data.tsv"
+└   "chains" => Any[]
+┌ Info: Log2 Bayes: 4.44
+│
+│   •  Log(pdf) - model 1: -31.53397005887427
+│
+│   •  Log(pdf) - model 2: -35.97395926954643
+│
+└ Note - Positive values indicate more evidence for model 1
+```
+
 
 # Command references
 

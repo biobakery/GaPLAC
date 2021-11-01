@@ -5,10 +5,11 @@ function _cli_run_select(args)
     !isempty(args["chains"]) && !isempty(args["formulae"]) && throw(ArgumentError("'select' can only take one of '--formulae' or '--chains', not both"))
 
     if !isempty(args["chains"])
-        lp1 = CSV.read(args["chains"][1], DataFrame)
-        lp2 = CSV.read(args["chains"][2], DataFrame)
-        bayes = log2(harmmean(BigFloat(2) ^ x for x in lp1[!, :lp]) /
-                     harmmean(BigFloat(2) ^ x for x in lp2[!, :lp]))
+        lp1df = CSV.read(args["chains"][1], DataFrame)
+        lp1 = log2(harmmean([BigFloat(2) ^ x for x in lp1df[!, :lp]]))
+        lp2df = CSV.read(args["chains"][2], DataFrame)
+        lp2 = log2(harmmean([BigFloat(2) ^ x for x in lp2df[!, :lp]]))
+        bayes = log2(BigFloat(2)^lp1 / BigFloat(2)^lp2)
     elseif !isempty(args["formulae"])
         (resp1, lik1, gp_form1) = _cli_formula_parse(args["formulae"][1])
         (resp2, lik2, gp_form2) = _cli_formula_parse(args["formulae"][2])
@@ -52,8 +53,8 @@ function _cli_run_select(args)
     @info """
         **Log2 Bayes**: $(round(Float64(bayes), digits=3))
         
-        - **Log(pdf)** - model 1: $(lp1)
-        - **Log(pdf)** - model 2: $(lp2)
+        - **Log(pdf)** - model 1: $(round(lp1), digits=8)
+        - **Log(pdf)** - model 2: $(round(lp2), digits=8)
         
         _Note_ - Positive values indicate more evidence for model 1
         """

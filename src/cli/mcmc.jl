@@ -17,7 +17,7 @@ function _cli_run_mcmc(args)
     @debug "Model variables" vars
 
     @model function inference_engine(Y, X, eq, inferable)
-        ℓ ~ TruncatedNormal(1, 5, 0, 30)
+        ℓ ~ TruncatedNormal(0, 5, 0, 30)
         gp, = _apply_vars(eq; hyperparams=Dict(v=> ℓ for v in inferable))
         
         fx ~ AbstractGPs.FiniteGP(GP(gp), RowVecs(X), 0.1)
