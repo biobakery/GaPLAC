@@ -53,8 +53,8 @@ function _cli_run_select(args)
     @info """
         **Log2 Bayes**: $(round(Float64(bayes), digits=3))
         
-        - **Log(pdf)** - model 1: $(round(lp1), digits=8)
-        - **Log(pdf)** - model 2: $(round(lp2), digits=8)
+        - **Log(pdf)** - model 1: $(round(lp1, digits=8))
+        - **Log(pdf)** - model 2: $(round(lp2, digits=8))
         
         _Note_ - Positive values indicate more evidence for model 1
         """

@@ -58,7 +58,9 @@ function _cli_run_sample(args)
             xtest = range(xmin, xmax, length = 100)
             ym, yvar = mean_and_var(pgp, xtest) 
             
-            fig, ax, l = scatter(x, y)
+            fig, ax, l = scatter(x, y, color=:purple)
+            srt = sortperm(x)
+            lines!(x[srt],y[srt], color=:purple)
             ax.xlabel = string(first(vars))
             ax.ylabel = string(resp)
             ax.title = "Sample from posterior, x from $xmin to $xmax"
