@@ -1,16 +1,22 @@
-function _cli_run_mcmc(args)
+module MCMC
+
+using GaPLAC
+using Turing
+
+function run(args)
     @info "running 'mcmc'" 
-    (resp, lik, gp_form) = _cli_formula_parse(args["formula"])
-    @debug "GP formula" gp_form
+    gpspec = GaPLAC.gp_formula(args["formula"])
+    
+    @debug "GP formula" GaPLAC.formula(gpspec)
         
     df = CSV.read(args["data"], DataFrame)
     
-    eq, vars = _apply_vars(gp_form)
+    eq, vars = _apply_vars(GaPLAC.formula(gpspec))
     kernels = _walk_kernel(eq)
     length(vars) == length(kernels) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
     inferable = Symbol.(args["infer"])
 
-    y = df[!, resp]
+    y = df[!, GaPLAC.response(gpspec)]
     x = Matrix(df[!, vars])
 
     @debug "GP equation" eq 
@@ -24,7 +30,7 @@ function _cli_run_mcmc(args)
         Y .~ Normal.(fx, 1)
     end
 
-    m = inference_engine(y, x, gp_form, inferable)
+    m = inference_engine(y, x, GaPLAC.formula(gpspec), inferable)
     
     chain = sample(m, NUTS(0.65), args["samples"], progress=true)
     _df_output(chain, args)
@@ -34,4 +40,6 @@ end
 
 function _get_hyperparams(infer, kernels, vars)
     hyperparams = Dict{Symbol,Number}()    
+end
+
 end

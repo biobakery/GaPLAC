@@ -1,4 +1,3 @@
-using GaPLAC
 using ArgParse
 using LoggingExtras
 using TerminalLoggers
@@ -139,9 +138,12 @@ end
 
 setup_logs!(loglevel, args["log"])
 
-args["%COMMAND%"] == "sample" && GaPLAC._cli_run_sample(args["sample"])
-args["%COMMAND%"] == "mcmc" && GaPLAC._cli_run_mcmc(args["mcmc"])
-args["%COMMAND%"] == "select" && GaPLAC._cli_run_select(args["select"])
+include("cli/GaPLAC_CLI.jl")
+using .CLI
+
+args["%COMMAND%"] == "sample" && CLI.Sample.run(args["sample"])
+args["%COMMAND%"] == "mcmc" && CLI.MCMC.run(args["mcmc"])
+args["%COMMAND%"] == "select" && CLI.Select.run(args["select"])
 
 nothing
 # # Redirect logging to a file if necessary

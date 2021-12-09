@@ -1,4 +1,6 @@
-function _cli_run_select(args)
+module Select
+
+function run(args)
     @info "running 'select'"
     @info args 
     
@@ -11,16 +13,16 @@ function _cli_run_select(args)
         lp2 = log2(harmmean([BigFloat(2) ^ x for x in lp2df[!, :lp]]))
         bayes = log2(BigFloat(2)^lp1 / BigFloat(2)^lp2)
     elseif !isempty(args["formulae"])
-        (resp1, lik1, gp_form1) = _cli_formula_parse(args["formulae"][1])
-        (resp2, lik2, gp_form2) = _cli_formula_parse(args["formulae"][2])
+        spec1 = gp_formula(args["formulae"][1])
+        spec2 = gp_formula(args["formulae"][2])
         
-        @debug "GP formulae" gp_form1 gp_form2
+        @debug "GP formulae" GaPLAC.formula(spec1) GaPLAC.formula(spec2)
             
-        eq1, vars1 = _apply_vars(gp_form1)
+        eq1, vars1 = _apply_vars(GaPLAC.formula(gp_form1))
         kernels1 = _walk_kernel(eq1)
         length(vars1) == length(kernels1) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
 
-        eq2, vars2 = _apply_vars(gp_form2)
+        eq2, vars2 = _apply_vars(GaPLAC.formula(spec2))
         kernels2 = _walk_kernel(eq2)
         length(vars2) == length(kernels2) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
         
@@ -32,11 +34,11 @@ function _cli_run_select(args)
         df = CSV.read(args["data"], DataFrame)
         df = disallowmissing(df[completecases(df),:])
         
-        y1 = df[!, resp1]
+        y1 = df[!, GaPLAC.response(spec1)]
         x1 = Matrix(df[!, vars1])
         pr1 = AbstractGPs.FiniteGP(gp1, x1, 0.1, obsdim=1)    
 
-        y2 = df[!, resp2]
+        y2 = df[!, GaPLAC.response(spec2)]
         x2 = Matrix(df[!, vars2])
         pr2 = AbstractGPs.FiniteGP(gp2, x2, 0.1, obsdim=1)    
         
@@ -58,5 +60,7 @@ function _cli_run_select(args)
         
         _Note_ - Positive values indicate more evidence for model 1
         """
+
+end
 
 end

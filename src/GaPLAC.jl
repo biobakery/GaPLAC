@@ -2,27 +2,26 @@ module GaPLAC
 
 export invnormaltransform
 
+# GP Packages
 using AbstractGPs
 using KernelFunctions
-using Distances
+using GPLikelihoods
+using Distances: Euclidean
+
+# Bayesian stuff
+using Turing
 using Distributions
+using Turing: Variational
+
+# Data stuff
 using CSV
 using DataFrames
 using CairoMakie
-using Turing
-using Turing: Variational
-using StatsFuns
-using StatsBase
-using Flux
 
-include("gps.jl")
+include("gp_parts.jl")
 include("liklihoods.jl")
 include("abstractgp_translations.jl")
 include("utils.jl")
-
-include("cli/formula.jl")
-include("cli/sample.jl")
-include("cli/mcmc.jl")
-include("cli/select.jl")
+include("interface.jl")
 
 end # module

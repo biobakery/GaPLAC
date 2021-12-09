@@ -1,4 +1,4 @@
-function _cli_formula_parse(formula::AbstractString)
+function gp_formula(formula::AbstractString)
     spl1 = findfirst(==(':'), formula)
     spl2 = last(findfirst(==('~'), formula))
     isnothing(spl2) && throw(ArgumentError("Invalid formula specification"))
@@ -19,5 +19,5 @@ function _cli_formula_parse(formula::AbstractString)
     gp = strip(formula[nextind(formula, barind):end])
     gp = GaPLAC.eval(Meta.parse(gp))
 
-    return Symbol(resp), lik, gp
+    return GPSpec(Symbol(resp), lik, gp)
 end

@@ -1,6 +1,8 @@
 function _make_test_grid(args...)
-    return permutedims(reshape(collect(Iterators.flatten(reduce(vcat, Iterators.product(args...)))),
-    length(args), *(length.(args)...)))
+    return reshape(Iterators.flatten(
+                            reduce(vcat, Iterators.product(args...))
+                            ) |> collect,
+                    length(args), *(length.(args)...)) |> permutedims
 end
 
 function _make_test_df(args...; vars)

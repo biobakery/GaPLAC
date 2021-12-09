@@ -1,10 +1,14 @@
-function _cli_run_sample(args)
+module Sample
+
+using GaPLAC
+
+function run(args)
     @info "running 'sample'" 
     @info args
-    (resp, lik, gp_form) = _cli_formula_parse(args["formula"])
-    @debug "GP formula" gp_form
+    gpspec = gp_formula(args["formula"])
+    @debug "GP formula" GaPLAC.formula(gpspec)
         
-    eq, vars = _apply_vars(gp_form)
+    eq, vars = _apply_vars(GaPLAC.formula(gpspec))
     kernels = _walk_kernel(eq)
     length(vars) == length(kernels) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
     
@@ -38,7 +42,7 @@ function _cli_run_sample(args)
     
     df = _make_test_df((atdict[v] for v in vars)...; vars)
     X = RowVecs(Matrix(df))
-    df[!, resp] = rand(gp(X, 0.1))
+    df[!, GaPLAC.response(gpspec)] = rand(gp(X, 0.1))
     
     _df_output(df, args)
 
@@ -51,21 +55,22 @@ function _cli_run_sample(args)
         else
             @info "Plotting output"
             x = df[!, first(vars)]
-            y = df[!, resp]
+            y = df[!, GaPLAC.response(gpspec)]
             fx = AbstractGPs.FiniteGP(gp, x, 0.1)
             pgp = posterior(fx, y)
             xmin, xmax = extrema(x) .+ (-1, 1)
             xtest = range(xmin, xmax, length = 100)
             ym, yvar = mean_and_var(pgp, xtest) 
             
-            fig, ax, l = scatter(x, y, color=:purple)
-            srt = sortperm(x)
-            lines!(x[srt],y[srt], color=:purple)
-            ax.xlabel = string(first(vars))
-            ax.ylabel = string(resp)
-            ax.title = "Sample from posterior, x from $xmin to $xmax"
-            lines!(xtest, ym, color=:dodgerblue)
+            # fig, ax, l = scatter(x, y, color=:purple)
+            # srt = sortperm(x)
+            # lines!(x[srt],y[srt], color=:purple)
+            
+            fig, ax, l = lines(xtest, ym, color=:dodgerblue)
             band!(xtest, ym .- yvar, ym .+ yvar, color=(:dodgerblue, 0.3))
+            ax.xlabel = string(first(vars))
+            ax.ylabel = string(GaPLAC.response(gpspec))
+            ax.title = "Sample from posterior, x from $(round(xmin, digits=2)) to $(round(xmax, digits=2))"
 
             save(args["plot"], fig)
         end
@@ -73,3 +78,5 @@ function _cli_run_sample(args)
 
     return df, gp
 end
+
+end # module

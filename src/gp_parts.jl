@@ -1,4 +1,15 @@
 using Base: Symbol, Real
+
+struct GPSpec
+    response::Symbol
+    lik
+    formula
+end
+
+likelihood(gps::GPSpec) = gps.lik
+response(gps::GPSpec) = gps.response
+formula(gps::GPSpec) = gps.formula
+
 abstract type GPCompnent end
 
 struct CategoricalKernel <: KernelFunctions.SimpleKernel end
