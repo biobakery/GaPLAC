@@ -1,5 +1,11 @@
 module Select
 
+using GaPLAC
+using GaPLAC.CSV
+using GaPLAC.DataFrames
+using GaPLAC.StatsBase
+using GaPLAC.AbstractGPs
+
 function run(args)
     @info "running 'select'"
     @info args 
@@ -13,17 +19,17 @@ function run(args)
         lp2 = log2(harmmean([BigFloat(2) ^ x for x in lp2df[!, :lp]]))
         bayes = log2(BigFloat(2)^lp1 / BigFloat(2)^lp2)
     elseif !isempty(args["formulae"])
-        spec1 = gp_formula(args["formulae"][1])
-        spec2 = gp_formula(args["formulae"][2])
+        spec1 = GaPLAC.gp_formula(args["formulae"][1])
+        spec2 = GaPLAC.gp_formula(args["formulae"][2])
         
         @debug "GP formulae" GaPLAC.formula(spec1) GaPLAC.formula(spec2)
             
-        eq1, vars1 = _apply_vars(GaPLAC.formula(gp_form1))
-        kernels1 = _walk_kernel(eq1)
+        eq1, vars1 = GaPLAC._apply_vars(GaPLAC.formula(spec1))
+        kernels1 = GaPLAC._walk_kernel(eq1)
         length(vars1) == length(kernels1) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
 
-        eq2, vars2 = _apply_vars(GaPLAC.formula(spec2))
-        kernels2 = _walk_kernel(eq2)
+        eq2, vars2 = GaPLAC._apply_vars(GaPLAC.formula(spec2))
+        kernels2 = GaPLAC._walk_kernel(eq2)
         length(vars2) == length(kernels2) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
         
         gp1 = GP(eq1)
@@ -55,8 +61,8 @@ function run(args)
     @info """
         **Log2 Bayes**: $(round(Float64(bayes), digits=3))
         
-        - **Log(pdf)** - model 1: $(round(lp1, digits=8))
-        - **Log(pdf)** - model 2: $(round(lp2, digits=8))
+        - **Log(pdf)** - model 1: $(round(lp1, digits=4))
+        - **Log(pdf)** - model 2: $(round(lp2, digits=4))
         
         _Note_ - Positive values indicate more evidence for model 1
         """

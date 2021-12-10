@@ -137,6 +137,7 @@ else
 end
 
 setup_logs!(loglevel, args["log"])
+@info "Getting started!"
 
 include("cli/GaPLAC_CLI.jl")
 using .CLI

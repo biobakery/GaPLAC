@@ -42,7 +42,7 @@ _convert2eq(c::GPCompnent; hyperparams=Dict()) = haskey(hyperparams, varname(c))
 
 _convert2eq(op::Symbol, c1::Kernel, c2::Kernel; hyperparams=Dict()) = _convertop(op)(c1, c2)
 
-function _apply_select(formula::Tuple; hyperparams=Dict())
+function _apply_select(formula::Tuple;  hyperparams=Dict())
     vars = _formula_pull_varnames(formula)
     varmap = Dict(var=>i for (i, var) in enumerate(unique(vars)))
     

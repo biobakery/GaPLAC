@@ -17,6 +17,7 @@ using Turing: Variational
 using CSV
 using DataFrames
 using CairoMakie
+using StatsBase
 
 include("gp_parts.jl")
 include("liklihoods.jl")
