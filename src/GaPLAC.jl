@@ -19,6 +19,13 @@ using DataFrames
 using CairoMakie
 using StatsBase
 
+# Other stuff
+using ReTest
+
+@testset "Module" begin
+    @test true
+end
+
 include("gp_parts.jl")
 include("liklihoods.jl")
 include("abstractgp_translations.jl")

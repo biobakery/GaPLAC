@@ -1,8 +1,6 @@
-using GaPLAC
-using GaPLAC.DataFrames
-using GaPLAC.CSV
-using Test
-using Random
+using ReTest
+include("GaPLACTests.jl")
+GaPLACTests.runtests()
 
-@test "CLI formula parseing"
-end
+using GaPLAC
+GaPLAC.runtests()
