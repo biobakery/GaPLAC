@@ -36,7 +36,7 @@ function parse_cmdline()
     end
 
     @add_arg_table! s["sample"] begin
-        "formula"
+        "spec"
             help = "GP formula specification"
             required = true
         "--at"

@@ -7,37 +7,15 @@ using GaPLAC.CairoMakie
 function run(args)
     @info "running 'sample'" 
     @info args
-    gpspec = GaPLAC.gp_formula(args["formula"])
-    @debug "GP formula" GaPLAC.formula(gpspec)
+    gpspec = GaPLAC.gp_spec(args["spec"])
+    @debug "GP spec" GaPLAC.formula(gpspec)
         
-    eq, vars = GaPLAC._apply_vars(GaPLAC.formula(gpspec))
-    kernels = GaPLAC._walk_kernel(eq)
-    length(vars) == length(kernels) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
+    gp, vars = GaPLAC.make_gp(gpspec)
     
-    @debug "GP equation" eq 
     @debug "Model variables" vars
-    gp = GP(eq)
-
     @debug "GP" gp
 
-    atdict = Dict{Symbol, Any}()
-    ats = Meta.parse(args["at"])
-    @debug "Passed ranges" ats
-
-    exprs = ats.head == :toplevel ? ats.args : [ats]
-    
-    for expr in exprs
-        expr.head == Symbol("=") || error("Only assignments allowed in `--at` argument")
-        var = expr.args[1]
-        val = GaPLAC.eval(expr.args[2])
-        atdict[var] = val
-    end
-    
-    for (i, var) in enumerate(vars)
-        if !in(var, keys(atdict))
-            atdict[var] = GaPLAC._default_range(kernels[i])
-        end
-    end
+    atdict = GaPLAC.getatrange(args["at"])
  
     @debug "Inferred ranges" atdict
     @debug "Number of combinations" (*(length.(values(atdict))...))
@@ -56,25 +34,8 @@ function run(args)
                 """
         else
             @info "Plotting output"
-            x = df[!, first(vars)]
-            y = df[!, GaPLAC.response(gpspec)]
-            fx = AbstractGPs.FiniteGP(gp, x, 0.1)
-            pgp = posterior(fx, y)
-            xmin, xmax = extrema(x) .+ (-1, 1)
-            xtest = range(xmin, xmax, length = 100)
-            ym, yvar = mean_and_var(pgp, xtest) 
             
-            fig, ax, l = scatter(x, y, color=:purple, label="samples")
-            # srt = sortperm(x)
-            # lines!(x[srt],y[srt], color=:purple)
-            
-            lines!(xtest, ym, color=:dodgerblue, label="mean posterior")
-            band!(xtest, ym .- yvar, ym .+ yvar, color=(:dodgerblue, 0.3), label="var posterior")
-            
-            ax.xlabel = string(first(vars))
-            ax.ylabel = string(GaPLAC.response(gpspec))
-            ax.title = "Sample from posterior, x from $(round(xmin, digits=2)) to $(round(xmax, digits=2))"
-            axislegend()
+            fig, ax, l = GaPLAC.sample_plot(gpspec, df)
             save(args["plot"], fig)
         end
     end

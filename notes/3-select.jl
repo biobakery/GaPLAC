@@ -7,7 +7,9 @@ using DataFrames
 using Turing
 using CairoMakie
 
-spec = GaPLAC.gp_formula("y ~| OU(:x)")
+spec1 = GaPLAC.gp_spec("y ~| OU(:x)")
+spec2 = GaPLAC.gp_spec("y ~| OU(:t) * Categorical(:g) + Linear(:d)")
+spec3 = GaPLAC.gp_spec("y ~| OU(:x)")
 
 eq, vars = GaPLAC._apply_vars(GaPLAC.formula(spec))
 kernels = GaPLAC._walk_kernel(eq)
