@@ -42,7 +42,7 @@ _convert2eq(op::Symbol, c1::Kernel, c2::Kernel; hyperparams=Dict()) = _convertop
 # end
 
 # formerly _apply_vars
-function kernel(formula::Tuple; hyperparams=Dict())
+function kernel(formula::GPOperation; hyperparams=Dict())
     vars = varnames(formula)
     ks = _convert2eq(formula; hyperparams)
     retkernel = nothing

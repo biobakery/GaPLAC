@@ -50,7 +50,7 @@ end
 
 varname(gpc::GPCompnent) = gpc.varname
 varnames(gpc::GPCompnent) = [varname(gpc)]
-varnames(gpo::GPOperation) = reduce(hcat, varname.(gpo.lhs, gpo.rhs))
+varnames(gpo::GPOperation) = reduce(vcat, [varnames(gpo.lhs), varnames(gpo.rhs)])
 
 Base.:+(c1::GPCompnent, c2::GPCompnent) = GPOperation(:add, c1, c2)
 # Base.:+(c1::Tuple, c2::GPCompnent) = (:add, c1, c2)

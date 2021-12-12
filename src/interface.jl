@@ -41,13 +41,13 @@ function make_gp(spec::Spec)
 end
 
 
-function getatrange(at::AbstractString, vars=Symbol[])
+function getatrange(spec::Spec, at::AbstractString, vars=Symbol[])
     atdict = Dict{Symbol, Any}()
     ats = Meta.parse(at)
     @debug "Passed ranges" ats
 
     exprs = ats.head == :toplevel ? ats.args : [ats]
-    
+
     for expr in exprs
         expr.head == Symbol("=") || error("Only assignments allowed in `--at` argument")
         var = expr.args[1]
@@ -55,6 +55,8 @@ function getatrange(at::AbstractString, vars=Symbol[])
         atdict[var] = val
     end
     
+    kern, vars = GaPLAC.kernel(GaPLAC.formula(spec))
+    kernels = GaPLAC._walk_kernel(kern)
     for (i, var) in enumerate(vars)
         if !in(var, keys(atdict))
             atdict[var] = GaPLAC._default_range(kernels[i])
