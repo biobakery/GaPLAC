@@ -6,7 +6,7 @@ using CSV
 using DataFrames
 using Turing
 
-gpspec = GaPLAC.gp_formula("y ~| SExp(:x)")
+gpspec = GaPLAC.gp_formula("y ~| SqExp(:x)")
 
 df = CSV.read("data.tsv", DataFrame)
 eq, vars = GaPLAC._apply_vars(gp_form)

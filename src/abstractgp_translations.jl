@@ -5,12 +5,12 @@ _default_range(::ExponentialKernel)   = 1:10
 _default_range(::LinearKernel)        = -3:0.1:3
 _default_range(::CategoricalKernel)   = [1,2,3]
 
-makekernel(k::SExp) = k.lengthscale == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), k.lengthscale)
+makekernel(k::SqExp) = k.lengthscale == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), k.lengthscale)
 makekernel(k::OU) = k.lengthscale == 1 ? ExponentialKernel() : with_lengthscale(ExponentialKernel(), k.lengthscale)
 makekernel(k::Linear) = LinearKernel(c=k.intercept)
 makekernel(::Cat) = CategoricalKernel()
 
-makekernel(::SExp, l) = l == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), l)
+makekernel(::SqExp, l) = l == 1 ? SqExponentialKernel() : with_lengthscale(SqExponentialKernel(), l)
 makekernel(::OU, l) = l == 1 ? ExponentialKernel() : with_lengthscale(ExponentialKernel(), l)
 makekernel(::Linear, c) = LinearKernel(; c)
 

@@ -65,19 +65,19 @@ end
 
 @testset "Interface" begin
     @testset "Formula Parsing" begin
-        spec1 = gp_spec("y ~| SExp(:t)")
+        spec1 = gp_spec("y ~| SqExp(:t)")
         @test likelihood(spec1) isa GaPLAC.Gaussian
         @test response(spec1) == :y
         @test formula(spec1) isa GaPLAC.GPCompnent
-        @test formula(spec1) isa GaPLAC.SExp
+        @test formula(spec1) isa GaPLAC.SqExp
         
-        spec2 = gp_spec("bug ~| SExp(:t) + Linear(:x)")
+        spec2 = gp_spec("bug ~| SqExp(:t) + Linear(:x)")
         @test likelihood(spec2) isa GaPLAC.Gaussian
         @test response(spec2) == :bug
         @test formula(spec2) isa GaPLAC.GPCompnent
         @test formula(spec2) isa GaPLAC.GPOperation
 
-        spec3 = gp_spec("bug ~| SExp(:t) * Cat(:g) + Linear(:x)")
+        spec3 = gp_spec("bug ~| SqExp(:t) * Cat(:g) + Linear(:x)")
         @test likelihood(spec3) isa GaPLAC.Gaussian
         @test response(spec3) == :bug
         @test formula(spec3) isa GaPLAC.GPCompnent

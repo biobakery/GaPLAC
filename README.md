@@ -25,7 +25,7 @@ GaPLAC has five main commands to work with: `sample`, `mcmc`, `select`, `predict
 Run the following command from the GaPLAC root folder:
 
 ```
-./gaplac sample "y :~| SExp(:x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
+./gaplac sample "y :~| SqExp(:x; l=1)" --at "x=-5:0.1:5" --plot gp_sample.png
 ```
 
 This may take a few minutes the first time, since Julia must compile all the packages. It will produce a large amount of output to the console, and should also produce a plot in `gp_sample.png` which resembles:
@@ -36,16 +36,16 @@ If instead you get an error mentioning missing dependencies, it means that step 
 
 Let's look at each of the pieces of the command:
 
-- `"y :~| SExp(:x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (described later) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
+- `"y :~| SqExp(:x; l=1)"`: This is the GP formula, much like a model formula in R. In this case, the output (`y`) is modeled as a GP with a Squared-Exponential covariance function (`SqExp`) with a lengthscale (`l`) of `1`. Note also the `:` in `:~|`. Normally, a data likelihood (described later) can be specified between the `:` and the `~`, but here we don't specify anything, and the GP will be modeled _without_ a likelihood. This effectively allows us more directly observe the types of dynamics modeled by the Gaussian Process described in the formula.
 - `--at "x=-5:0.1:5"`: This tells GaPLAC what values of `x` to sample the GP at.
 - `--plot gp_sample.png`: Plot the dynamics here.
 
-Try changing the lengthscale of the `SExp` term. How does this affect the function? Try adding other components (the full list is at the end of this document) by adding them to the formula, such as an Ornstein-Uhlenbeck process (`OU(x; l=1)`), or simply some `Noise`.
+Try changing the lengthscale of the `SqExp` term. How does this affect the function? Try adding other components (the full list is at the end of this document) by adding them to the formula, such as an Ornstein-Uhlenbeck process (`OU(x; l=1)`), or simply some `Noise`.
 
 Now let's generate a smaller set of data at some randomly chosen `x` coordinates, and store the results in a file instead of printing to stdout:
 
 ```
-./gaplac sample "y :~| SExp(:x; l=1.5)" --at "x = rand(Uniform(-5,5), 50)" --output data.tsv
+./gaplac sample "y :~| SqExp(:x; l=1.5)" --at "x = rand(Uniform(-5,5), 50)" --output data.tsv
 ```
 
 Look at the contents of `data.tsv`. It should contain two columns: `x` and `y`, and the rows are not sorted in any way. We will use this data for the next command.
@@ -58,7 +58,7 @@ We are usually interested in the parameters of the covariance function which bes
 Try running the following command:
 
 ```
-./gaplac mcmc "y ~| SExp(:x)" --data data.tsv --output mcmc.tsv --samples 500 --infer x
+./gaplac mcmc "y ~| SqExp(:x)" --data data.tsv --output mcmc.tsv --samples 500 --infer x
 ```
 
 First, note that the model formula omits the additional `:` before the `~`. This will therefore default to a Gaussian likelihood.
@@ -98,14 +98,14 @@ You may also compare different forumla parameters on your initial data,
 rather than using the outputs from MCMC.
 
 ```
-./gaplac -v select --formulae "y ~| SExp(:x, l=2)" "y ~| SExp(:x, l=1)" --data data.tsv
+./gaplac -v select --formulae "y ~| SqExp(:x, l=2)" "y ~| SqExp(:x, l=1)" --data data.tsv
 ```
 ```
 [ Info: running 'select'
 ┌ Info:
 │ Dict{String, Any} with 4 entries:
 │   "plot" => nothing
-│   "formulae" => Any["y ~| SExp(:x, l=1.5)", "y ~| OU(:x, l=1.5)"]
+│   "formulae" => Any["y ~| SqExp(:x, l=1.5)", "y ~| OU(:x, l=1.5)"]
 │   "data" => "data.tsv"
 └   "chains" => Any[]
 ┌ Info: Log2 Bayes: 4.44
@@ -182,7 +182,7 @@ optional arguments:
                         Which model hyperparameter to infer. Specify
                         variable names, the hyperparameter(s) will be
                         determined based on kernel type (eg length
-                        scale for SExp)
+                        scale for SqExp)
   -o, --output OUTPUT   Table to output sampling chain
   --plot PLOT           File to plot to
   -h, --help            show this help message and exit

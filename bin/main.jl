@@ -62,7 +62,7 @@ function parse_cmdline()
             help = """
                 Which model hyperparameter to infer.
                 Specify variable names, the hyperparameter(s) will be determined
-                based on kernel type (eg length scale for SExp)
+                based on kernel type (eg length scale for SqExp)
                 """
             nargs = '+'
             required = true

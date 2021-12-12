@@ -13,17 +13,17 @@ KernelFunctions.kappa(::CategoricalKernel, d2::Real) = d2 > 0 ? 0.0 : 1.0
 KernelFunctions.metric(::CategoricalKernel) = Euclidean()
 
 """
-    SExp(symbol, lengthscale=1)
-    SExp(symbol; l = 1)
+    SqExp(symbol, lengthscale=1)
+    SqExp(symbol; l = 1)
 
 Squared Exponential Kernel with lengthscale `l`
 """
-struct SExp <: GPCompnent
+struct SqExp <: GPCompnent
     varname::Symbol
     lengthscale::Real
 
     # inner constructor
-    SExp(x; l=1) = new(Symbol(x), l)
+    SqExp(x; l=1) = new(Symbol(x), l)
 end
 
 struct Linear <: GPCompnent
