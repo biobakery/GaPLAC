@@ -86,9 +86,14 @@ end
 
     @testset "Ranges" begin
         at1 = getatrange("x = rand(Uniform(-5,5), 50)")
-
+        @test haskey(at1, :x)
+        @test length(at1[:x]) == 50
+        low,high = extrema(at1[:x])
+        @test -5 < low < high < 5
         
-
-        at2 = "x = rand(Uniform(-5,5), 50)"
+        at2 = getatrange("thing = rand(Normal(0,1), 100)")
+        @test haskey(at2, :thing)
+        @test length(at2[:thing]) == 100
+        @test -0.5 < mean(at2[:thing]) < 0.5
     end
 end
