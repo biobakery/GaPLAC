@@ -10,16 +10,17 @@ using Statistics
 
 function run(args)
     @info "running 'mcmc'" 
-    gpspec = GaPLAC.gp_formula(args["formula"])
+    gpspec = GaPLAC.gp_spec(args["formula"])
     
     @debug "GP formula" GaPLAC.formula(gpspec)
         
     df = CSV.read(args["data"], DataFrame)
     
-    eq, vars = GaPLAC._apply_vars(GaPLAC.formula(gpspec))
-    kernels = GaPLAC._walk_kernel(eq)
-    length(vars) == length(kernels) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
+    gp, vars = GaPLAC.make_gp(gpspec)
     inferable = Symbol.(args["infer"])
+        
+    @debug "Model variables" vars
+    @debug "GP" gp
 
     y = df[!, GaPLAC.response(gpspec)]
     x = Matrix(df[!, vars])
@@ -29,7 +30,7 @@ function run(args)
 
     @model function inference_engine(Y, X, eq, inferable)
         ℓ ~ Uniform(0,20)
-        gp, = GaPLAC._apply_vars(eq; hyperparams=Dict(v=> ℓ for v in inferable))
+        gp, = GaPLAC.kernel(eq; hyperparams=Dict(v=> ℓ for v in inferable))
         
         fx ~ AbstractGPs.FiniteGP(GP(gp), RowVecs(X), 0.1)
         Y .~ Normal.(fx, 1)

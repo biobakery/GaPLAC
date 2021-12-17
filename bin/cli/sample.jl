@@ -15,7 +15,7 @@ function run(args)
     @debug "Model variables" vars
     @debug "GP" gp
 
-    atdict = GaPLAC.getatrange(args["at"])
+    atdict = GaPLAC.getatrange(gpspec, args["at"])
  
     @debug "Inferred ranges" atdict
     @debug "Number of combinations" (*(length.(values(atdict))...))

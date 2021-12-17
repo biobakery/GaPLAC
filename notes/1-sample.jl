@@ -74,6 +74,7 @@ df[!, GaPLAC.response(gpspec)] = rand(gp(X, 0.1))
 
 GaPLAC._df_output(df, cli_args)
 
-fig, ax, l = GaPLAC.sample_plot(gpspec, df)
-fig
-save(cli_args["plot"], fig)
+# # Not working yet
+# fig, ax, l = GaPLAC.sample_plot(gpspec, df)
+# fig
+# save(cli_args["plot"], fig)
