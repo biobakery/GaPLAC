@@ -20,7 +20,6 @@ using Turing: Variational
 # Data stuff
 using CSV
 using DataFrames
-using CairoMakie
 using StatsBase
 
 # Other stuff
