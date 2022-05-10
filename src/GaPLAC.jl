@@ -1,6 +1,10 @@
 module GaPLAC
 
-export invnormaltransform
+export invnormaltransform,
+       gp_spec,
+       likelihood,
+       response,
+       formula
 
 # GP Packages
 using AbstractGPs
@@ -16,7 +20,6 @@ using Turing: Variational
 # Data stuff
 using CSV
 using DataFrames
-using CairoMakie
 using StatsBase
 
 # Other stuff
@@ -31,5 +34,6 @@ include("liklihoods.jl")
 include("abstractgp_translations.jl")
 include("utils.jl")
 include("interface.jl")
+include("plotting.jl")
 
 end # module

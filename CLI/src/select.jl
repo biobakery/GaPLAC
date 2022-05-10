@@ -19,21 +19,19 @@ function run(args)
         lp2 = log2(harmmean([BigFloat(2) ^ x for x in lp2df[!, :lp]]))
         bayes = log2(BigFloat(2)^lp1 / BigFloat(2)^lp2)
     elseif !isempty(args["formulae"])
-        spec1 = GaPLAC.gp_formula(args["formulae"][1])
-        spec2 = GaPLAC.gp_formula(args["formulae"][2])
+        spec1 = GaPLAC.gp_spec(args["formulae"][1])
+        spec2 = GaPLAC.gp_spec(args["formulae"][2])
         
         @debug "GP formulae" GaPLAC.formula(spec1) GaPLAC.formula(spec2)
             
-        eq1, vars1 = GaPLAC._apply_vars(GaPLAC.formula(spec1))
-        kernels1 = GaPLAC._walk_kernel(eq1)
-        length(vars1) == length(kernels1) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
-
-        eq2, vars2 = GaPLAC._apply_vars(GaPLAC.formula(spec2))
-        kernels2 = GaPLAC._walk_kernel(eq2)
-        length(vars2) == length(kernels2) || error("Something went wrong with equation parsing, number of variables should == number of kernels")
+        eq1, vars1 = GaPLAC.make_gp(spec1)
+        eq2, vars2 = GaPLAC.make_gp(spec2)
         
-        gp1 = GP(eq1)
-        gp2 = GP(eq2)
+        k1, = GaPLAC.kernel(formula(spec1))
+        k2, = GaPLAC.kernel(formula(spec2))
+        
+        gp1 = GP(k1)
+        gp2 = GP(k2)
 
         @debug "GPs:" gp1 gp2
 

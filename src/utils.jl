@@ -29,7 +29,7 @@ end
 
 function _df_output(df, args)
     if !isnothing(args["output"])
-        @info "Writing to $(args["output"])"
+        @info "Writing to `$(args["output"])`"
         out = args["output"]
         delim = endswith(out, "csv") ? ',' :
               endswith(out, "tsv") ? '\t' : error("--output arg must be '.tsv' or '.csv'")

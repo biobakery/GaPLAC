@@ -4,11 +4,11 @@ using Documenter
 makedocs(;
     modules=[GaPLAC],
     authors="Kevin Bonham, PhD; Jason Lloyde-Price, PhD",
-    repo="https://github.com/biobakery/gptool.jl/blob/{commit}{path}#L{line}",
-    sitename="gptool.jl",
+    repo="https://github.com/biobakery/GaPLAC/blob/{commit}{path}#L{line}",
+    sitename="GaPLAC",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://biobakery.github.io/gptool.jl",
+        canonical="https://biobakery.github.io/GaPLAC",
         assets=String[]
     ),
     pages=[
@@ -17,5 +17,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/biobakery/gptool.jl",
+    repo="github.com/biobakery/GaPLAC",
 )
