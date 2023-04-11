@@ -1,0 +1,6 @@
+#!/usr/bin/sh
+BASEDIR="$(dirname $0)"
+BINDIR="$(dirname $0)/bin"
+
+julia --startup-file=no -t auto --project="$BASEDIR" --color=yes -e 'using Pkg; Pkg.instantiate()'
+julia --startup-file=no -t auto --project="$BINDIR" --color=yes -e 'using Pkg; Pkg.instantiate()'
