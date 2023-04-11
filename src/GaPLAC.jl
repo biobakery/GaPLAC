@@ -23,6 +23,7 @@ using DataFrames
 using StatsBase
 
 # Other stuff
+using CairoMakie
 using ReTest
 
 @testset "Module" begin

@@ -1,5 +1,5 @@
 using CLI
-using LoggingExtras
+using CLI.LoggingExtras
 
 args = CLI.parse_cmdline()
 
